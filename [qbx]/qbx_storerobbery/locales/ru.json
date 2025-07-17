@@ -1,0 +1,19 @@
+{
+    "error": {
+        "no_police": "Недостаточно полиции (требуется %s)",
+        "process_canceled": "Процесс отменён..",
+        "lockpick_broken": "Вы сломали отмычку"
+    },
+    "text": {
+        "register_empty": "Касса пуста",
+        "try_combination": "~g~E~w~ - Попробовать комбинацию",
+        "safe_opened": "Сейф открыт",
+        "emptying_the_register": "Опустошение кассы..",
+        "safe_code": "Код сейфа: ",
+        "value": "Стоимость: $%s"
+    },
+    "alert": {
+        "register": "Кто-то взламывает кассу!",
+        "safe": "Кто-то взламывает сейф!"
+    }
+}

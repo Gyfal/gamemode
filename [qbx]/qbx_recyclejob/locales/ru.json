@@ -1,0 +1,25 @@
+{
+  "success": {
+    "you_have_been_clocked_in": "Вы начали смену"
+  },
+  "text": {
+    "point_enter_warehouse": "[E] - Войти на склад",
+    "enter_warehouse": "Войти на склад",
+    "exit_warehouse": "Выйти со склада",
+    "point_exit_warehouse": "[E] - Выйти со склада",
+    "clock_out": "Закончить смену",
+    "point_clock_out": "[E] - Закончить смену",
+    "clock_in": "Начать смену",
+    "point_clock_in": "[E] - Начать смену",
+    "hand_in_package": "Сдать посылку",
+    "point_hand_in_package": "[E] - Сдать посылку",
+    "get_package": "Взять посылку",
+    "point_get_package": "[E] - Взять посылку",
+    "picking_up_the_package": "Берём посылку",
+    "unpacking_the_package": "Распаковываем посылку"
+  },
+  "error": {
+    "you_have_clocked_out": "Вы закончили смену",
+    "overweight_check": "Вы не можете нести больше предметов"
+  }
+}

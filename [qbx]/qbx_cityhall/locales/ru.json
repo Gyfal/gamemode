@@ -1,0 +1,20 @@
+{
+    "error": {
+        "not_enough_money": "У вас недостаточно денег...",
+        "invalid_type": "Это недействительный тип документа..."
+    },
+    "success": {
+        "item_recieved": "Вы получили ",
+        "new_job": "Поздравляем с новой работой!"
+    },
+    "info": {
+        "cityhall": "Мэрия",
+        "open_cityhall": "[E] Открыть мэрию",
+        "target_open_cityhall": "Открыть мэрию",
+        "identity": "Документы",
+        "employment": "Трудоустройство",
+        "obtain_license_identity": "Получить лицензии",
+        "select_job": "Выбрать новую работу",
+        "price": "Цена: $%s"
+    }
+}

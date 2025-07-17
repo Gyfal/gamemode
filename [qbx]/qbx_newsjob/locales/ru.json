@@ -1,0 +1,28 @@
+{
+    "error": {
+        "cant_spawn_vehicle": "Что-то пошло не так при создании транспорта",
+        "no_access": "У вас нет доступа к этой команде."
+    },
+    "info": {
+        "weazle_overlay": "Оверлей Weazel: [E]  \nОверлей съёмки: [M]",
+        "weazel_news_vehicles": "Транспорт Weazel News",
+        "close_menu": "⬅ Закрыть меню",
+        "weazel_news_helicopters": "Вертолёты Weazel News",
+        "store_vehicle": "[E] - Припарковать транспорт",
+        "vehicles": "[E] - Транспорт",
+        "store_helicopters": "[E] - Припарковать вертолёт",
+        "helicopters": "[E] - Вертолёты",
+        "enter": "[E] - Войти",
+        "go_outside": "[E] - Выйти наружу",
+        "roof_enter": "[E] - Подняться на крышу",
+        "roof_exit": "[E] - Спуститься с крыши",
+        "breaking_news": "СРОЧНЫЕ НОВОСТИ",
+        "title_breaking_news": "Weazel Today - Эксклюзивные срочные новости",
+        "bottom_breaking_news": "Мы приносим вам ПОСЛЕДНИЕ НОВОСТИ в прямом эфире",
+        "newscam": "Взять новостную камеру",
+        "newsmic": "Взять новостной микрофон",
+        "newsbmic": "Взять микрофон на штанге",
+        "news_plate": "WZNW",
+        "blip_name": "Weazel News"
+    }
+}

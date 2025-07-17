@@ -1,0 +1,30 @@
+{
+    "error": {
+        "already_mission": "Вы уже выполняете миссию с NPC",
+        "not_in_taxi": "Вы не в такси",
+        "missing_meter": "В этом транспорте нет таксометра",
+        "no_vehicle": "Вы не в транспорте",
+        "not_active_meter": "Таксометр не активен",
+        "no_meter_sight": "Таксометр не виден"
+    },
+    "success": {},
+    "info": {
+        "person_was_dropped_off": "Пассажир высажен!",
+        "npc_on_gps": "NPC отмечен на вашем GPS",
+        "go_to_location": "Отвезите NPC в указанное место",
+        "vehicle_parking": "[E] - Парковка транспорта",
+        "job_vehicles": "[E] - Рабочий транспорт",
+        "drop_off_npc": "[E] - Высадить NPC",
+        "call_npc": "[E] - Вызвать NPC",
+        "blip_name": "Downtown Cab",
+        "taxi_label_1": "Стандартное такси",
+        "no_spawn_point": "Невозможно найти место для вызова такси",
+        "taxi_returned": "Такси припарковано",
+        "request_taxi": "[E] - Вызвать такси",
+        "request_taxi_target": "Вызвать такси"
+    },
+    "menu": {
+        "taxi_menu_header": "Транспорт такси",
+        "close_menu": "⬅ Закрыть меню"
+    }
+}

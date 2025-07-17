@@ -1,0 +1,17 @@
+{
+  "toggle_front_driver_door": "Открыть/закрыть переднюю дверь водителя",
+  "toggle_front_passenger_door": "Открыть/закрыть переднюю дверь пассажира",
+  "toggle_rear_driver_door": "Открыть/закрыть заднюю дверь водителя",
+  "toggle_rear_passenger_door": "Открыть/закрыть заднюю дверь пассажира",
+  "toggle_hood": "Открыть/закрыть капот",
+  "toggle_trunk": "Открыть/закрыть багажник",
+  "debug_box": "(Отладка) Куб",
+  "debug_sphere": "(Отладка) Сфера",
+  "debug_police_car": "Полицейская машина",
+  "debug_ped": "(Отладка) Персонаж",
+  "debug_vehicle": "(Отладка) Транспорт",
+  "debug_object": "(Отладка) Объект",
+  "debug_global": "(Отладка) Глобальный",
+  "toggle_targeting": "Переключить прицеливание",
+  "go_back": "Назад"
+}

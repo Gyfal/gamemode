@@ -1,0 +1,54 @@
+{
+  "addcom": {
+    "addkeys": "addkeys",
+    "addkeys_help": "Добавляет ключи к транспорту для кого-то.",
+    "addkeys_id": "id",
+    "addkeys_id_help": "ID игрока",
+    "addkeys_plate": "plate",
+    "addkeys_plate_help": "Номер",
+    "givekeys": "givekeys",
+    "givekeys_help": "Передать ключи кому-то. Если нет ID, передаёт ближайшему человеку или всем в транспорте.",
+    "givekeys_id": "id",
+    "givekeys_id_help": "ID игрока",
+    "givekeys_plate": "plate",
+    "givekeys_plate_help": "Номер",
+    "removekeys": "removekeys",
+    "removekeys_help": "Убрать ключи к транспорту у кого-то.",
+    "removekeys_id": "id",
+    "removekeys_id_help": "ID игрока",
+    "removekeys_plate": "plate",
+    "removekeys_plate_help": "Номер"
+  },
+  "info": {
+    "engine": "Переключить двигатель",
+    "search_keys_dispatch": "[H] - Поиск ключей",
+    "search_keys": "Поиск ключей от транспорта",
+    "toggle_locks": "Переключить замки транспорта",
+    "vehicle_theft": "Угон транспорта в процессе. Тип: "
+  },
+  "notify": {
+    "carjack_failed": "Угон провален!",
+    "failed_lockedpick": "Вы не смогли взломать замок.",
+    "failed_keys": "Вы не смогли найти ключи и расстроились.",
+    "fpid": "Заполните ID игрока и номер",
+    "gave_keys": "Вы передали ключи.",
+    "added_keys": "Вы дали копию ключей от транспорта %s игроку %s!",
+    "keys_taken": "Вы получили ключи от транспорта!",
+    "keys_removed": "Вы потеряли ключи от транспорта!",
+    "no_keys": "У вас нет ключей от этого транспорта.",
+    "not_near": "Рядом никого нет, чтобы передать ключи",
+    "vehicle_not_near": "Недостаточно близко к транспорту",
+    "vehicle_locked": "Транспорт заблокирован!",
+    "vehicle_lockedpick": "Вы смогли взломать замок двери!",
+    "vehicle_unlocked": "Транспорт разблокирован!",
+    "removed_keys": "Ключи от номера %s у игрока %s были удалены!",
+    "removed_keys_player": "Ваши ключи от номера %s были удалены!",
+    "player_offline": "Этот игрок не в сети!",
+    "vehicle_is_unlocked": "Транспорт уже разблокирован!"
+  },
+  "progress": {
+    "attempting_carjack": "Попытка угона...",
+    "searching_keys": "Поиск ключей от машины...",
+    "takekeys": "Берём ключи с тела..."
+  }
+}

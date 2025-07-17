@@ -1,0 +1,72 @@
+{
+    "notify": {
+        "no_access": "Нет доступа.",
+        "someone_at_door": "Кто-то у вашей двери!",
+        "keyholder": " был добавлен как владелец ключа.",
+        "added_as_keyholder": "Вы были добавлены как владелец ключа.",
+        "removed_as_keyholder": " был удалён из владельцев ключа."
+    },
+    "alert": {
+        "give_keys": "Дать ключи этому человеку?",
+        "apartment_selection": "Выбор квартиры",
+        "are_you_sure": "Вы уверены, что хотите получить %s?",
+        "want_remove_keys": "Хотите забрать ключи у этого человека?",
+        "want_let_person_in": "Хотите впустить этого человека?",
+        "property_name": "Название недвижимости",
+        "property_name_description": "Простое описательное название недвижимости",
+        "price": "Цена",
+        "price_description": "Цена покупки или цена аренды",
+        "rent_interval": "Интервал аренды",
+        "rent_interval_description": "Интервал взимания арендной платы в часах (делает недвижимость арендуемой вместо покупаемой)",
+        "add_garage": "Добавить гараж"
+    },
+    "menu": {
+        "add_keyholder": "Добавить владельца ключа",
+        "people_inside": "Люди внутри",
+        "keyholders": "Владельцы ключей",
+        "doorbell_ringers": "Звонившие в дверь",
+        "manage_keys": "Управление ключами",
+        "doorbell": "Дверной звонок",
+        "manage_property": "Управление недвижимостью",
+        "enter": "Войти",
+        "ring_doorbell": "Позвонить в дверь",
+        "properties": "Недвижимость",
+        "retrieve_properties": "Получить принадлежащую недвижимость",
+        "show_owned_properties": "Показать только вашу недвижимость",
+        "interior_preview": "Предпросмотр интерьера",
+        "start_decorating": "Начать декорирование",
+        "decorating_categories": "Категории"
+    },
+    "instructButtons": {
+        "up": "Вверх",
+        "down": "Вниз",
+        "submit": "Подтвердить"
+    },
+    "keyMappings": {
+        "gizmo_translation": "Режим перемещения",
+        "gizmo_rotation": "Режим вращения",
+        "gizmo_select": "Выбрать выделенное",
+        "gizmo_local": "Локальная ориентация объекта"
+    },
+    "drawtext": {
+        "stash": "[E] - Хранилище",
+        "exit": "[E] - Выход | [G] - Управление",
+        "clothing": "[E] - Одежда | [G] - Наряды",
+        "logout": "[E] - Выйти",
+        "view_property": "[E] - Посмотреть недвижимость"
+    },
+    "logs": {
+        "create_property": "Попытка создать недвижимость.",
+        "property_created": "Недвижимость %s успешно создана.",
+        "enter_property": "Игрок %s вошёл в недвижимость %s.",
+        "exit_property": "Игрок %s вышел из недвижимости id %s.",
+        "apartment_selected": "Игрок %s выбрал квартиру %s %s.",
+        "added_keyholder": "Добавлен %s как владелец ключа к недвижимости %s.",
+        "removed_keyholder": "Удалён %s как владелец ключа к недвижимости %s.",
+        "rent_property": "Игрок %s арендовал недвижимость %s.",
+        "buy_property": "Игрок %s купил недвижимость %s.",
+        "stop_renting": "Игрок %s прекратил аренду недвижимости %s.",
+        "add_decoration": "Игрок %s добавил декорацию %s в недвижимость %s.",
+        "remove_decoration": "Игрок %s удалил декорацию %s из недвижимости %s."
+    }
+}

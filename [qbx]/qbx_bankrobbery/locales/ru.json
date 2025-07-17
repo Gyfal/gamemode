@@ -1,0 +1,31 @@
+{
+    "success": {
+        "success_message": "Успешно",
+        "fuses_are_blown": "Предохранители перегорели",
+        "door_has_opened": "Дверь открылась"
+    },
+    "error": {
+        "cancel_message": "Отменено",
+        "safe_too_strong": "Похоже, замок сейфа слишком прочный...",
+        "missing_item": "У вас не хватает предмета...",
+        "bank_already_open": "Банк уже открыт...",
+        "minimum_police_required": "Требуется минимум %s полицейских",
+        "security_lock_active": "Защитный замок активен, открыть дверь сейчас невозможно",
+        "wrong_type": "%s не получил правильный тип для аргумента '%s'\nполученный тип: %s\nполученное значение: %s\nожидаемый тип: %s",
+        "fuses_already_blown": "Предохранители уже перегорели...",
+        "event_trigger_wrong": "%s%s был вызван, когда некоторые условия не были выполнены, источник: %s",
+        "missing_ignition_source": "У вас нет источника воспламенения"
+    },
+    "general": {
+        "breaking_open_safe": "Взлом сейфа...",
+        "connecting_hacking_device": "Подключение устройства взлома...",
+        "fleeca_robbery_alert": "Попытка ограбления банка Fleeca",
+        "paleto_robbery_alert": "Попытка ограбления сберегательного банка округа Блейн",
+        "pacific_robbery_alert": "Попытка ограбления Pacific Standard Bank",
+        "break_safe_open_option_target": "Взломать сейф",
+        "break_safe_open_option_drawtext": "[E] Взломать сейф",
+        "validating_bankcard": "Проверка карты...",
+        "thermite_detonating_in_seconds": "Термит сработает через %s секунд(ы)",
+        "bank_robbery_police_call": "10-90: Ограбление банка"
+    }
+}

@@ -1,0 +1,93 @@
+{
+    "notifications": {
+        "success": {
+            "repaired": "Транспорт отремонтирован!",
+            "paid": "Вы заплатили $%s с банковского счёта"
+        },
+        "error": {
+            "money": "У вас недостаточно денег!",
+            "alreadyInstalled": "У вас уже установлена эта модификация"
+        },
+        "props": {
+            "installTitle": "Тюнинг"
+        }
+    },
+    "dragCam": {
+        "zoomIn": "Увеличить масштаб",
+        "zoomOut": "Уменьшить масштаб",
+        "toggleDoors": "Открыть/закрыть двери",
+        "changeView": "Переключить вид от первого лица"
+    },
+    "textUI": {
+        "tune": "Нажмите [E] для тюнинга автомобиля"
+    },
+    "menus": {
+        "main": {
+            "title": "Popcorn Customs",
+            "repair": "Ремонт",
+            "performance": "Производительность",
+            "parts": "Косметика - Детали",
+            "colors": "Косметика - Цвета",
+            "extras": "Дополнительно"
+        },
+        "colors": {
+            "primary": "Основной цвет",
+            "secondary": "Дополнительный цвет",
+            "neon": "Неон",
+            "cosmetics_colors": "Косметика - Цвета"
+        },
+        "neon": {
+            "title": "Неон",
+            "neon": "Неон %s%s",
+            "color": "Цвет неона",
+            "installed": "%s неон установлен"
+        },
+        "paint": {
+            "title": "Косметика - Цвета",
+            "primary": "Основная покраска",
+            "secondary": "Дополнительная покраска"
+        },
+        "parts": {
+            "title": "Косметика - Детали",
+            "wheels": "Колёса"
+        },
+        "performance": {
+            "title": "Производительность",
+            "turbo": "Турбо"
+        },
+        "wheels": {
+            "title": "Колёса",
+            "bikeRear": "Заднее колесо мотоцикла",
+            "installed": "%s %s установлено"
+        },
+        "options": {
+            "interior": "Интерьер",
+            "livery": "Раскраска",
+            "pearlescent": "Перламутр",
+            "plateIndex": {
+                "title": "Номерные знаки",
+                "installed": "%s номерной знак установлен"
+            },
+            "tyreSmoke": "Дым от шин",
+            "wheelColor": "Цвет дисков",
+            "windowTint": {
+                "title": "Тонировка стёкол",
+                "installed": "%s тонировка установлена"
+            },
+            "xenon": {
+                "title": "Ксенон",
+                "installed": "%s ксенон установлен"
+            }
+        },
+        "general": {
+            "stock": "Стандарт",
+            "enabled": "Включено",
+            "disabled": "Выключено",
+            "installed": "%s установлено",
+            "applied": "%s применено"
+        }
+    },
+    "general": {
+        "payReason": "Тюнинг"
+    }
+}

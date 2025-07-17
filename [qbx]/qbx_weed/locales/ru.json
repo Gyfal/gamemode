@@ -1,0 +1,23 @@
+{
+    "error": {
+        "process_canceled": "Процесс отменён",
+        "plant_has_died": "Растение погибло. Нажмите ~r~E~w~ чтобы убрать растение.",
+        "cant_place_here": "Нельзя поставить здесь",
+        "not_safe_here": "Здесь небезопасно, попробуйте дома",
+        "not_need_nutrition": "Растению не нужно питание",
+        "this_plant_no_longer_exists": "Это растение больше не существует?",
+        "house_not_found": "Дом не найден",
+        "you_dont_have_enough_resealable_bags": "У вас недостаточно пакетов для упаковки"
+    },
+    "text": {
+        "sort": "Сорт:",
+        "harvest_plant": "Нажмите ~g~E~w~ чтобы собрать урожай.",
+        "nutrition": "Питание:",
+        "health": "Здоровье:",
+        "harvesting_plant": "Сбор урожая",
+        "planting": "Посадка",
+        "feeding_plant": "Кормление растения",
+        "the_plant_has_been_harvested": "Растение собрано",
+        "removing_the_plant": "Удаление растения"
+    }
+}

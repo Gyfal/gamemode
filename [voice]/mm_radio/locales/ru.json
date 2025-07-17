@@ -1,0 +1,34 @@
+{
+    "join_notify_description": "Подключение к станции %.2f МГц",
+    "invalid_notify_description": "Станция %.2f МГц недоступна",
+    "already_notify_description": "Вы уже подключены к станции %.2f МГц",
+    "restricted_notify_description": "Вам не разрешено подключаться к станции %.2f МГц",
+    "volume_notify_description": "Громкость установлена на %d%%",
+    "unsuccess_name": "Не удалось изменить имя",
+    "jammer_notify_description": "Не удалось подключиться к станции %.2f МГц",
+    "toggle_defean": "Рация заглушена",
+    "toggle_undeafen": "Рация разглушена",
+    "failed_mute": "Не удалось заглушить игрока",
+    
+    "ui": {
+        "header": "В РАЦИИ",
+        "frequency": "Частота",
+        "disconnect": "ОТКЛЮЧИТЬ",
+        "notconnected": "НЕ ПОДКЛЮЧЕНО",
+        "settings": "Настройки",
+        "channels": "Каналы",
+        "radio": "Рация",
+        "members": "Участники",
+        "favorites": "Избранное",
+        "recommended": "Рекомендуемые",
+        "clear": "ОЧИСТИТЬ",
+        "hide_overlay": "СКРЫТЬ ОВЕРЛЕЙ",
+        "show_overlay": "ПОКАЗАТЬ ОВЕРЛЕЙ",
+        "save": "СОХРАНИТЬ",
+        "radio_settings": "Настройки рации",
+        "move_radio": "Переместить рацию",
+        "allow_move": "Разрешить перемещение",
+        "overlay_settings": "Настройки оверлея",
+        "enableClicks": "Звук рации"
+    }
+}

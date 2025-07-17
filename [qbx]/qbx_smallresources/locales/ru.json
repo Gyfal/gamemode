@@ -1,0 +1,42 @@
+{
+   "error": {
+      "canceled": "Отменено..",
+      "cruise_control_disabled": "Круиз-контроль отключён",
+      "cruise_control_unavailable": "Круиз-контроль недоступен",
+      "deleted_recording": "Запись удалена!",
+      "later_aligator": "Увидимся, аллигатор!",
+      "stress_gain": "Уровень стресса повышается!",
+      "no_vehicle_nearby": "Рядом нет транспорта для переворота.",
+      "is_handcuffed": "Вы в наручниках.",
+      "is_fastened": "На вас надет ремень безопасности."
+   },
+   "success": {
+      "cruise_control_enabled": "Круиз-контроль включён",
+      "started_recording": "Запись началась!",
+      "stopped_recording": "Запись остановлена!",
+      "saved_recording": "Запись сохранена!",
+      "stress_relief": "Вы чувствуете себя более расслабленно!",
+      "flipped_car": "Транспорт успешно перевёрнут!"
+   },
+   "progress": {
+      "eating": "Приём пищи..",
+      "drinking": "Питьё..",
+      "drinking_liquor": "Питьё алкоголя..",
+      "quick_sniff": "Быстрый нюх..",
+      "smoking_crack": "Курение крэка..",
+      "popping_pills": "Приём таблеток..",
+      "healing": "Лечение..",
+      "smoking_meth": "Курение мета..",
+      "lighting_joint": "Поджигание косяка..",
+      "flipping_car": "Переворачивание транспорта..."
+   },
+   "info": {
+      "minutes": "минут",
+      "seconds": "секунд..",
+      "shuffleSeat": "Пересесть"
+   },
+   "actions": {
+      "push_vehicle": "Нажмите [~g~SHIFT~w~] и [~g~E~w~] чтобы толкать транспорт, пока не отпустите [~g~SHIFT~w~]",
+      "toggle_cruise_control": "Переключить круиз-контроль"
+   }
+}

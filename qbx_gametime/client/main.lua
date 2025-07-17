@@ -118,7 +118,7 @@ RegisterNetEvent(config.events.onWeatherChange, function(current)
         currentWeather = current
         -- Сбрасываем флаг применённой погоды для принудительного обновления
         lastAppliedWeather = ""
-        
+         
         if config.debug then
             print(string.format("^4[GameTime] Получено изменение погоды: %s^0", currentWeather))
         end
@@ -130,7 +130,7 @@ end)
 -- ================================
 
 AddStateBagChangeHandler('moscowTime', 'global', function(_, _, value)
-    print("moscowTime changed", _, _, value)
+    print("moscowTime changed", _, _, value) 
     if value then
         moscowTime = value
         lastServerMoscowTime = value -- Обновляем локальную переменную

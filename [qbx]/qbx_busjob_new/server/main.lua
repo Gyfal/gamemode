@@ -112,12 +112,20 @@ local function finishBusJob(src)
     -- Возврат залога
     if data.deposit and data.deposit > 0 then
         player.Functions.AddMoney('cash', data.deposit, 'bus-job-deposit-return')
-        exports.qbx_core:Notify(src, ('Залог возвращен: $%d'):format(data.deposit), 'success')
+        lib.notify(src, {
+            title = 'Залог возвращен',
+            description = ('$%d'):format(data.deposit),
+            type = 'success'
+        })
     end
 
     -- Итоговая статистика
     local workTime = os.time() - (data.startTime or os.time())
-    exports.qbx_core:Notify(src, ('Заработано за смену: $%d'):format(data.earnings or 0), 'info')
+    lib.notify(src, {
+        title = 'Заработано за смену',
+        description = ('$%d'):format(data.earnings or 0),
+        type = 'info'
+    })
 
     if config.logging.enabled then
         logToConsole(
@@ -145,19 +153,31 @@ RegisterNetEvent('qbx_busjob_new:server:startJob', function()
 
     -- Проверка, не работает ли уже игрок
     if player.PlayerData.job.name == config.job.name then
-        exports.qbx_core:Notify(src, 'Вы уже работаете водителем автобуса!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Вы уже работаете водителем автобуса!',
+            type = 'error'
+        })
         return
     end
 
     -- Проверяем расстояние до NPC
     if not isPlayerNearLocation(src, sharedConfig.jobNPC.coords.xyz, 50.0) then
-        exports.qbx_core:Notify(src, 'Вы слишком далеко от NPC!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Вы слишком далеко от NPC!',
+            type = 'error'
+        })
         return
     end
 
     -- Устанавливаем работу
     player.Functions.SetJob(config.job.name, config.job.minGrade)
-    exports.qbx_core:Notify(src, 'Вы устроились водителем автобуса! Теперь вы можете взять автобус.', 'success')
+    lib.notify(src, {
+        title = 'Трудоустройство',
+        description = 'Вы устроились водителем автобуса! Теперь вы можете взять автобус.',
+        type = 'success'
+    })
 
     if config.logging.enabled then
         logToConsole(
@@ -174,7 +194,11 @@ RegisterNetEvent('qbx_busjob_new:server:quitJob', function()
     if not player then return end
 
     if player.PlayerData.job.name ~= config.job.name then
-        exports.qbx_core:Notify(src, 'Вы не работаете водителем автобуса!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Вы не работаете водителем автобуса!',
+            type = 'error'
+        })
         return
     end
 
@@ -183,7 +207,11 @@ RegisterNetEvent('qbx_busjob_new:server:quitJob', function()
 
     -- Сброс работы
     player.Functions.SetJob('unemployed', 0)
-    exports.qbx_core:Notify(src, 'Вы уволились с работы!', 'info')
+    lib.notify(src, {
+        title = 'Увольнение',
+        description = 'Вы уволились с работы!',
+        type = 'info'
+    })
 end)
 
 -- Запрос автобуса
@@ -195,18 +223,30 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
 
     -- Проверки
     if player.PlayerData.job.name ~= config.job.name then
-        exports.qbx_core:Notify(src, 'Вы не работаете водителем автобуса!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Вы не работаете водителем автобуса!',
+            type = 'error'
+        })
         return
     end
 
     if playerData[src] and playerData[src].working then
-        exports.qbx_core:Notify(src, 'Вы уже работаете!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Вы уже работаете!',
+            type = 'error'
+        })
         return
     end
 
     local busConfig = sharedConfig.busModels[busIndex]
     if not busConfig then
-        exports.qbx_core:Notify(src, 'Неверный выбор автобуса!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Неверный выбор автобуса!',
+            type = 'error'
+        })
         return
     end
 
@@ -215,7 +255,11 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
     if sharedConfig.settings.requireDeposit then
         deposit = busConfig.deposit
         if player.PlayerData.money.cash < deposit then
-            exports.qbx_core:Notify(src, 'У вас недостаточно наличных для залога!', 'error')
+            lib.notify(src, {
+                title = 'Ошибка',
+                description = 'У вас недостаточно наличных для залога!',
+                type = 'error'
+            })
             return
         end
 
@@ -228,7 +272,11 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
 
     -- Проверка расстояния от NPC (более логично, чем от места спавна)
     if not isPlayerNearLocation(src, sharedConfig.jobNPC.coords.xyz, 50.0) then
-        exports.qbx_core:Notify(src, 'Вы слишком далеко от NPC!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Вы слишком далеко от NPC!',
+            type = 'error'
+        })
         return
     end
 
@@ -240,7 +288,11 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
     })
 
     if not netId or netId == 0 then
-        exports.qbx_core:Notify(src, 'Не удалось создать автобус!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Не удалось создать автобус!',
+            type = 'error'
+        })
         if deposit > 0 then
             player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
         end
@@ -263,11 +315,19 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
     SetPedIntoVehicle(ped, veh, -1) -- -1 = водительское место
 
     -- Уведомление о готовности
-    exports.qbx_core:Notify(src, 'Автобус готов! Следуйте к первой остановке', 'success')
+    lib.notify(src, {
+        title = 'Автобус готов',
+        description = 'Следуйте к первой остановке',
+        type = 'success'
+    })
 
     -- Валидация и проверка маршрута
     if not routeId or type(routeId) ~= 'number' then
-        exports.qbx_core:Notify(src, 'Неверный ID маршрута!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Неверный ID маршрута!',
+            type = 'error'
+        })
         if deposit > 0 then
             player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
         end
@@ -283,7 +343,11 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
     end
 
     if not selectedRoute then
-        exports.qbx_core:Notify(src, 'Маршрут не найден!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Маршрут не найден!',
+            type = 'error'
+        })
         if deposit > 0 then
             player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
         end
@@ -292,7 +356,11 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
 
     -- Дополнительная валидация маршрута
     if not selectedRoute.stops or #selectedRoute.stops == 0 then
-        exports.qbx_core:Notify(src, 'Маршрут не содержит остановок!', 'error')
+        lib.notify(src, {
+            title = 'Ошибка',
+            description = 'Маршрут не содержит остановок!',
+            type = 'error'
+        })
         if deposit > 0 then
             player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
         end
@@ -301,7 +369,11 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
 
     -- Проверка доступности маршрута
     if getRouteBusCount(selectedRoute.id) >= maxBusesPerRoute then
-        exports.qbx_core:Notify(src, 'На этом маршруте уже максимальное количество автобусов!', 'error')
+        lib.notify(src, {
+            title = 'Маршрут занят',
+            description = 'На этом маршруте уже максимальное количество автобусов!',
+            type = 'error'
+        })
         if deposit > 0 then
             player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
         end
@@ -459,7 +531,11 @@ lib.addCommand('busfire', {
         description = string.format("Игрок %s принудительно уволен", GetPlayerName(targetId)),
         type = 'success'
     })
-    exports.qbx_core:Notify(targetId, 'Вы были уволены администратором', 'error')
+    lib.notify(targetId, {
+        title = 'Увольнение',
+        description = 'Вы были уволены администратором',
+        type = 'error'
+    })
 end)
 
 lib.addCommand('buslimit', {
@@ -546,7 +622,11 @@ RegisterNetEvent('qbx_busjob_new:server:reachedStop', function(stopIndex)
     -- Применяем бонус только если есть базовая оплата
     if payment > 0 and math.random(100) <= config.payment.bonusChance then
         payment = math.floor(payment * config.payment.bonusMultiplier)
-        exports.qbx_core:Notify(src, 'Бонус за отличную работу!', 'success')
+        lib.notify(src, {
+            title = 'Бонус',
+            description = 'Бонус за отличную работу!',
+            type = 'success'
+        })
     end
 
     -- Выдача денег
@@ -576,7 +656,11 @@ RegisterNetEvent('qbx_busjob_new:server:completedRoute', function()
     local bonus = sharedConfig.settings.routeCompleteBonus
     player.Functions.AddMoney(config.payment.type, bonus, 'bus-job-route-complete')
 
-    exports.qbx_core:Notify(src, ('Бонус за полный маршрут: $%d'):format(bonus), 'success')
+    lib.notify(src, {
+        title = 'Маршрут завершен',
+        description = ('Бонус за полный маршрут: $%d'):format(bonus),
+        type = 'success'
+    })
 
     if config.logging.logRoutes then
         local workTime = os.time() - playerData[src].startTime
@@ -740,10 +824,17 @@ AddEventHandler('onResourceStop', function(resourceName)
                 -- Возврат залога
                 if data.deposit > 0 then
                     player.Functions.AddMoney('cash', data.deposit, 'bus-job-deposit-return-resource-stop')
-                    exports.qbx_core:Notify(playerId, ('Работа завершена. Залог возвращен: $%d'):format(data.deposit),
-                        'info')
+                    lib.notify(playerId, {
+                        title = 'Работа завершена',
+                        description = ('Залог возвращен: $%d'):format(data.deposit),
+                        type = 'info'
+                    })
                 else
-                    exports.qbx_core:Notify(playerId, 'Работа завершена из-за перезапуска ресурса', 'info')
+                    lib.notify(playerId, {
+                        title = 'Работа завершена',
+                        description = 'Работа завершена из-за перезапуска ресурса',
+                        type = 'info'
+                    })
                 end
 
                 -- Логирование

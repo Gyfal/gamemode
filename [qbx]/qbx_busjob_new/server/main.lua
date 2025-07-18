@@ -4,6 +4,70 @@ local sharedConfig = require 'config.shared'
 -- Хранение данных игроков
 local playerData = {}
 
+-- Счетчик автобусов на маршрутах
+local routeBusCount = {}
+
+-- Текущий лимит автобусов на маршруте (можно изменить через админ команду)
+local maxBusesPerRoute = sharedConfig.settings.maxBusesPerRoute
+
+-- Централизованные функции управления счетчиками маршрутов
+local function incrementRouteBusCount(routeId)
+    if not routeId then return false end
+    
+    if not routeBusCount[routeId] then
+        routeBusCount[routeId] = 0
+    end
+    
+    routeBusCount[routeId] = routeBusCount[routeId] + 1
+    
+    if config.logging.enabled then
+        logToConsole(
+            'Счетчик маршрута',
+            ('Маршрут %d: +1 автобус (всего: %d)'):format(routeId, routeBusCount[routeId])
+        )
+    end
+    
+    return true
+end
+
+local function decrementRouteBusCount(routeId)
+    if not routeId then return false end
+    
+    if not routeBusCount[routeId] then
+        routeBusCount[routeId] = 0
+        return false
+    end
+    
+    routeBusCount[routeId] = math.max(0, routeBusCount[routeId] - 1)
+    
+    if config.logging.enabled then
+        logToConsole(
+            'Счетчик маршрута',
+            ('Маршрут %d: -1 автобус (всего: %d)'):format(routeId, routeBusCount[routeId])
+        )
+    end
+    
+    return true
+end
+
+local function getRouteBusCount(routeId)
+    if not routeId then return 0 end
+    return routeBusCount[routeId] or 0
+end
+
+
+local function validateRouteBusCount()
+    for routeId, count in pairs(routeBusCount) do
+        if count < 0 then
+            routeBusCount[routeId] = 0
+            if config.logging.enabled then
+                logToConsole('Валидация счетчика', ('Исправлен отрицательный счетчик маршрута %d'):format(routeId))
+            end
+        end
+    end
+end
+
+
 -- Функция проверки расстояния (антифрод)
 local function isPlayerNearLocation(src, coords, maxDistance)
     if not config.anticheat.enabled then return true end
@@ -29,6 +93,11 @@ local function finishBusJob(src)
     if not player or not playerData[src] or not playerData[src].working then return end
 
     local data = playerData[src]
+    
+    -- Уменьшаем счетчик маршрута
+    if data.currentRoute then
+        decrementRouteBusCount(data.currentRoute.id)
+    end
 
     -- Удаляем автобус, если он ещё существует
     if data.busNetId then
@@ -88,77 +157,12 @@ RegisterNetEvent('qbx_busjob_new:server:startJob', function()
 
     -- Устанавливаем работу
     player.Functions.SetJob(config.job.name, config.job.minGrade)
-
-    -- Параметры автобуса
-    local busConfig = sharedConfig.busModels[1] -- По умолчанию первый автобус
-    local deposit = 0
-    if sharedConfig.settings.requireDeposit then
-        deposit = busConfig.deposit or 0
-        if player.PlayerData.money.cash < deposit then
-            exports.qbx_core:Notify(src, 'У вас недостаточно наличных для залога!', 'error')
-            player.Functions.SetJob('unemployed', 0)
-            return
-        end
-        if deposit > 0 then
-            player.Functions.RemoveMoney('cash', deposit, 'bus-job-deposit')
-        end
-    end
-
-    -- Координаты спавна
-    local spawnLocation = sharedConfig.busSpawnLocations[math.random(1, #sharedConfig.busSpawnLocations)]
-
-    -- Спавн автобуса с моментальным варпом при помощи qbx.spawnVehicle
-    local netId = qbx.spawnVehicle({
-        model = busConfig.model,
-        spawnSource = spawnLocation,
-        warp = true
-    })
-
-    if not netId or netId == 0 then
-        exports.qbx_core:Notify(src, 'Не удалось создать автобус!', 'error')
-        if deposit > 0 then
-            player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
-        end
-        player.Functions.SetJob('unemployed', 0)
-        return
-    end
-
-    local veh = NetworkGetEntityFromNetworkId(netId)
-    if not DoesEntityExist(veh) then
-        exports.qbx_core:Notify(src, 'Не удалось создать автобус!', 'error')
-        if deposit > 0 then
-            player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
-        end
-        player.Functions.SetJob('unemployed', 0)
-        return
-    end
-
-    -- Настройка автобуса и ключей
-    local plate = 'BUS' .. math.random(1000, 9999)
-    SetVehicleNumberPlateText(veh, plate)
-    exports.qbx_vehiclekeys:GiveKeys(src, veh)
-    SetVehicleDoorsLocked(veh, 1)
-
-    -- Сохраняем данные игрока
-    playerData[src] = {
-        working = true,
-        busNetId = netId,
-        deposit = deposit,
-        currentStop = 1,
-        lastStopTime = os.time(),
-        earnings = 0,
-        startTime = os.time(),
-        spawnLocation = spawnLocation
-    }
-
-    -- Уведомляем клиента и начинаем маршрут
-    exports.qbx_core:Notify(src, 'Автобус готов! Следуйте к первой остановке', 'success')
-    TriggerClientEvent('qbx_busjob_new:client:startWork', src, netId, deposit)
+    exports.qbx_core:Notify(src, 'Вы устроились водителем автобуса! Теперь вы можете взять автобус.', 'success')
 
     if config.logging.enabled then
         logToConsole(
-            'Начало работы',
-            ('Игрок %s (ID: %s) начал смену автобусника. Залог: $%d'):format(GetPlayerName(src), src, deposit)
+            'Устройство на работу',
+            ('Игрок %s (ID: %s) устроился водителем автобуса'):format(GetPlayerName(src), src)
         )
     end
 end)
@@ -183,7 +187,7 @@ RegisterNetEvent('qbx_busjob_new:server:quitJob', function()
 end)
 
 -- Запрос автобуса
-RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex)
+RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
     local src = source
     local player = exports.qbx_core:GetPlayer(src)
 
@@ -261,12 +265,59 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex)
     -- Уведомление о готовности
     exports.qbx_core:Notify(src, 'Автобус готов! Следуйте к первой остановке', 'success')
 
+    -- Валидация и проверка маршрута
+    if not routeId or type(routeId) ~= 'number' then
+        exports.qbx_core:Notify(src, 'Неверный ID маршрута!', 'error')
+        if deposit > 0 then
+            player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
+        end
+        return
+    end
+
+    local selectedRoute = nil
+    for _, route in ipairs(sharedConfig.busRoutes) do
+        if route.id == routeId then
+            selectedRoute = route
+            break
+        end
+    end
+
+    if not selectedRoute then
+        exports.qbx_core:Notify(src, 'Маршрут не найден!', 'error')
+        if deposit > 0 then
+            player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
+        end
+        return
+    end
+
+    -- Дополнительная валидация маршрута
+    if not selectedRoute.stops or #selectedRoute.stops == 0 then
+        exports.qbx_core:Notify(src, 'Маршрут не содержит остановок!', 'error')
+        if deposit > 0 then
+            player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
+        end
+        return
+    end
+
+    -- Проверка доступности маршрута
+    if getRouteBusCount(selectedRoute.id) >= maxBusesPerRoute then
+        exports.qbx_core:Notify(src, 'На этом маршруте уже максимальное количество автобусов!', 'error')
+        if deposit > 0 then
+            player.Functions.AddMoney('cash', deposit, 'bus-job-deposit-return')
+        end
+        return
+    end
+    
+    -- Увеличиваем счетчик маршрута
+    incrementRouteBusCount(selectedRoute.id)
+
     -- Сохранение данных игрока
     playerData[src] = {
         working = true,
         busNetId = netId,
         deposit = deposit,
         currentStop = 1,
+        currentRoute = selectedRoute,
         lastStopTime = os.time(),
         earnings = 0,
         startTime = os.time(),
@@ -274,13 +325,13 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex)
     }
 
     -- Отправка данных клиенту
-    TriggerClientEvent('qbx_busjob_new:client:startWork', src, netId, deposit)
+    TriggerClientEvent('qbx_busjob_new:client:startWork', src, netId, deposit, routeId)
 
     if config.logging.enabled then
         logToConsole(
             'Начало работы',
-            ('Игрок %s начал работу. Автобус: %s, Залог: $%d, Спавн: %.1f, %.1f, %.1f'):format(
-                GetPlayerName(src), busConfig.label, deposit, spawnLocation.x, spawnLocation.y, spawnLocation.z)
+            ('Игрок %s начал работу. Автобус: %s, Маршрут: %s, Залог: $%d'):format(
+                GetPlayerName(src), busConfig.label, selectedRoute.name, deposit)
         )
     end
 end)
@@ -318,6 +369,143 @@ if config.debug and config.debug.enabled then
     end)
 end
 
+-- Административные команды для управления счетчиками маршрутов
+lib.addCommand('busroutes', {
+    help = 'Показать статистику маршрутов автобусов',
+    restricted = 'group.admin'
+}, function(source)
+    print(string.format("^2[BUS ADMIN] Статистика маршрутов для %s [%d]:^0", GetPlayerName(source), source))
+    
+    lib.notify(source, {
+        title = 'Статистика маршрутов',
+        description = 'Смотрите консоль сервера для подробной информации',
+        type = 'info'
+    })
+    
+    for _, route in ipairs(sharedConfig.busRoutes) do
+        local count = getRouteBusCount(route.id)
+        print(string.format("^3Маршрут %d (%s): %d/%d автобусов^0", route.id, route.name, count, maxBusesPerRoute))
+    end
+    
+    local activePlayersCount = 0
+    for _, data in pairs(playerData) do
+        if data.working then
+            activePlayersCount = activePlayersCount + 1
+        end
+    end
+    
+    print(string.format("^2Всего активных водителей: %d^0", activePlayersCount))
+end)
+
+lib.addCommand('busvalidate', {
+    help = 'Валидировать и исправить счетчики маршрутов',
+    restricted = 'group.admin'
+}, function(source)
+    validateRouteBusCount()
+    lib.notify(source, {
+        title = 'Валидация завершена',
+        description = 'Счетчики маршрутов валидированы',
+        type = 'success'
+    })
+end)
+
+lib.addCommand('busplayers', {
+    help = 'Показать всех активных водителей автобусов',
+    restricted = 'group.admin'
+}, function(source)
+    print(string.format("^2[BUS ADMIN] Активные водители для %s [%d]:^0", GetPlayerName(source), source))
+    
+    local activeCount = 0
+    for playerId, data in pairs(playerData) do
+        if data.working then
+            activeCount = activeCount + 1
+            local routeName = data.currentRoute and data.currentRoute.name or "Неизвестный"
+            local earnings = data.earnings or 0
+            local workTime = os.time() - (data.startTime or os.time())
+            
+            print(string.format("^3ID: %d, Имя: %s, Маршрут: %s, Заработано: $%d, Время: %d мин^0",
+                playerId, GetPlayerName(playerId), routeName, earnings, math.floor(workTime / 60)))
+        end
+    end
+    
+    lib.notify(source, {
+        title = 'Активные водители',
+        description = string.format("Найдено %d активных водителей (см. консоль сервера)", activeCount),
+        type = 'info'
+    })
+end)
+
+lib.addCommand('busfire', {
+    help = 'Принудительно уволить водителя автобуса',
+    restricted = 'group.admin',
+    params = {
+        { name = 'playerId', type = 'playerId', help = 'ID игрока' }
+    }
+}, function(source, args)
+    local targetId = args.playerId
+    
+    if not playerData[targetId] or not playerData[targetId].working then
+        lib.notify(source, {
+            title = 'Ошибка',
+            description = 'Игрок не работает водителем автобуса',
+            type = 'error'
+        })
+        return
+    end
+    
+    finishBusJob(targetId)
+    lib.notify(source, {
+        title = 'Увольнение',
+        description = string.format("Игрок %s принудительно уволен", GetPlayerName(targetId)),
+        type = 'success'
+    })
+    exports.qbx_core:Notify(targetId, 'Вы были уволены администратором', 'error')
+end)
+
+lib.addCommand('buslimit', {
+    help = 'Управление лимитом автобусов на маршруте',
+    restricted = 'group.admin',
+    params = {
+        { name = 'limit', type = 'number', help = 'Новый лимит автобусов на маршруте (0 для просмотра)', optional = true }
+    }
+}, function(source, args)
+    local newLimit = args.limit
+    
+    if not newLimit or newLimit == 0 then
+        lib.notify(source, {
+            title = 'Текущий лимит',
+            description = string.format("Лимит автобусов на маршруте: %d", maxBusesPerRoute),
+            type = 'info'
+        })
+        return
+    end
+    
+    if newLimit < 1 or newLimit > 20 then
+        lib.notify(source, {
+            title = 'Ошибка',
+            description = 'Лимит должен быть от 1 до 20',
+            type = 'error'
+        })
+        return
+    end
+    
+    local oldLimit = maxBusesPerRoute
+    maxBusesPerRoute = newLimit
+    
+    lib.notify(source, {
+        title = 'Лимит изменен',
+        description = string.format("Лимит автобусов изменен с %d на %d", oldLimit, newLimit),
+        type = 'success'
+    })
+    
+    if config.logging.enabled then
+        logToConsole(
+            'Изменение лимита',
+            ('Администратор %s изменил лимит автобусов с %d на %d'):format(GetPlayerName(source), oldLimit, newLimit)
+        )
+    end
+end)
+
 -- Прибытие на остановку
 RegisterNetEvent('qbx_busjob_new:server:reachedStop', function(stopIndex)
     local src = source
@@ -325,7 +513,10 @@ RegisterNetEvent('qbx_busjob_new:server:reachedStop', function(stopIndex)
 
     if not player or not playerData[src] or not playerData[src].working then return end
 
-    local stop = sharedConfig.busRoute[stopIndex]
+    local data = playerData[src]
+    if not data.currentRoute then return end
+
+    local stop = data.currentRoute.stops[stopIndex]
     if not stop then return end
 
     -- Антифрод проверки
@@ -347,8 +538,8 @@ RegisterNetEvent('qbx_busjob_new:server:reachedStop', function(stopIndex)
     -- Расчет оплаты на основе конфигурации остановки
     local payment = stop.payment or 0
 
-    -- Не выплачиваем за стартовую точку
-    if stop.isStartPoint then
+    -- Не выплачиваем за первую точку маршрута
+    if stopIndex == 1 then
         payment = 0
     end
 
@@ -369,7 +560,7 @@ RegisterNetEvent('qbx_busjob_new:server:reachedStop', function(stopIndex)
     if config.logging.logPayments then
         logToConsole(
             'Оплата за остановку',
-            ('Игрок %s получил $%d за остановку %s'):format(GetPlayerName(src), payment, stop.name)
+            ('Игрок %s получил $%d за точку %d'):format(GetPlayerName(src), payment, stopIndex)
         )
     end
 end)
@@ -434,6 +625,16 @@ RegisterNetEvent('qbx_busjob_new:server:endWork', function()
     finishBusJob(source)
 end)
 
+-- Callback для получения количества автобусов на маршрутах
+lib.callback.register('qbx_busjob_new:server:getRouteBusCount', function(source)
+    -- Создаем безопасную копию счетчиков для отправки клиенту
+    local safeCounts = {}
+    for _, route in ipairs(sharedConfig.busRoutes) do
+        safeCounts[route.id] = getRouteBusCount(route.id)
+    end
+    return safeCounts
+end)
+
 -- Обработка загрузки игрока
 RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     -- Очистка старых данных при подключении (если остались)
@@ -447,6 +648,11 @@ end)
 RegisterNetEvent('QBCore:Server:OnPlayerUnload', function()
     local src = source
     if playerData[src] then
+        -- Уменьшаем счетчик маршрута
+        if playerData[src].currentRoute then
+            decrementRouteBusCount(playerData[src].currentRoute.id)
+        end
+        
         -- Удаление автобуса
         if playerData[src].busNetId then
             local veh = NetworkGetEntityFromNetworkId(playerData[src].busNetId)
@@ -457,6 +663,13 @@ RegisterNetEvent('QBCore:Server:OnPlayerUnload', function()
             end
         end
 
+        if config.logging.enabled then
+            logToConsole(
+                'Выгрузка игрока',
+                ('Игрок %s выгружен, данные очищены'):format(GetPlayerName(src))
+            )
+        end
+
         playerData[src] = nil
     end
 end)
@@ -465,6 +678,11 @@ end)
 AddEventHandler('playerDropped', function()
     local src = source
     if playerData[src] then
+        -- Уменьшаем счетчик маршрута
+        if playerData[src].currentRoute then
+            decrementRouteBusCount(playerData[src].currentRoute.id)
+        end
+        
         -- Удаление автобуса
         if playerData[src].busNetId then
             local veh = NetworkGetEntityFromNetworkId(playerData[src].busNetId)
@@ -475,6 +693,13 @@ AddEventHandler('playerDropped', function()
                 TriggerClientEvent('qbx_busjob_new:client:deleteVehicle', src, playerData[src].busNetId)
                 DeleteEntity(veh)
             end
+        end
+
+        if config.logging.enabled then
+            logToConsole(
+                'Выход игрока',
+                ('Игрок %s покинул сервер, данные очищены'):format(GetPlayerName(src))
+            )
         end
 
         playerData[src] = nil
@@ -537,12 +762,19 @@ AddEventHandler('onResourceStop', function(resourceName)
                 -- Отправка события клиенту для очистки
                 TriggerClientEvent('qbx_busjob_new:client:endWork', playerId)
             end
+            
+            -- Уменьшаем счетчик маршрута
+            if data.currentRoute then
+                decrementRouteBusCount(data.currentRoute.id)
+            end
         end
     end
 
     -- Очищаем все данные
     playerData = {}
+    routeBusCount = {}
 
     print(string.format('^3[BUS JOB] ^1Ресурс остановлен. Удалено %d автобусов. Все активные работы завершены.^0',
         cleanupCount))
 end)
+

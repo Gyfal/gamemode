@@ -217,6 +217,7 @@ end)
 -- Запрос автобуса
 RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
     local src = source
+    if not src then return end
     local player = exports.qbx_core:GetPlayer(src)
 
     if not player then return end

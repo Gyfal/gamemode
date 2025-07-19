@@ -80,7 +80,7 @@ local function isPlayerNearLocation(src, coords, maxDistance)
 end
 
 -- Функция логирования
-local function logToConsole(title, message)
+function logToConsole(title, message)
     if not config.logging.enabled then return end
 
     local timestamp = os.date('%Y-%m-%d %H:%M:%S')
@@ -90,6 +90,7 @@ end
 -- Функция завершения работы (универсальная)
 local function finishBusJob(src)
     local player = exports.qbx_core:GetPlayer(src)
+    print('finishBusJob', player, playerData[src] and playerData[src].working)
     if not player or not playerData[src] or not playerData[src].working then return end
 
     local data = playerData[src]
@@ -102,6 +103,7 @@ local function finishBusJob(src)
     -- Удаляем автобус, если он ещё существует
     if data.busNetId then
         local veh = NetworkGetEntityFromNetworkId(data.busNetId)
+        print('veh', veh, data.busNetId, DoesEntityExist(veh))
         if DoesEntityExist(veh) then
             exports.qbx_vehiclekeys:RemoveKeys(src, veh, true)
             TriggerClientEvent('qbx_busjob_new:client:deleteVehicle', src, data.busNetId)

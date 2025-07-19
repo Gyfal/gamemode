@@ -6,7 +6,7 @@ return {
         blip = {
             enabled = true,
             sprite = 513, -- Иконка блипа (автобус)
-            color = 5, -- Цвет блипа (желтый)
+            color = 38,
             scale = 0.8,
             label = 'Автопарк' -- Название блипа
         }

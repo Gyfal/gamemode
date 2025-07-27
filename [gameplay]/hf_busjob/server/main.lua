@@ -7,6 +7,9 @@ local playerData = {}
 -- Счетчик автобусов на маршрутах
 local routeBusCount = {}
 
+-- Система кэширования видимости автобусов
+local busVisibility = {} -- [busNetId] = { visibleTo = {[playerId] = lastSentData}, lastUpdate = timestamp }
+
 -- Текущий лимит автобусов на маршруте (можно изменить через админ команду)
 local maxBusesPerRoute = sharedConfig.settings.maxBusesPerRoute
 
@@ -87,6 +90,29 @@ function logToConsole(title, message)
     print(string.format('^3[BUS JOB] ^2[%s] ^5%s^0: %s', timestamp, title, message))
 end
 
+-- Функция для получения ID следующей остановки
+local function getNextStopId(route, currentStopId)
+    if not route or not route.stops then return 0 end
+    
+    -- Ищем следующую остановку с waitTime
+    for i = currentStopId, #route.stops do
+        local stop = route.stops[i]
+        if stop.waitTime and stop.waitTime > 0 then
+            return i
+        end
+    end
+    
+    -- Если не нашли впереди, ищем с начала (кольцевой маршрут)
+    for i = 1, currentStopId - 1 do
+        local stop = route.stops[i]
+        if stop.waitTime and stop.waitTime > 0 then
+            return i
+        end
+    end
+    
+    return 0
+end
+
 -- Функция завершения работы (универсальная)
 local function finishBusJob(src)
     local player = exports.qbx_core:GetPlayer(src)
@@ -109,6 +135,12 @@ local function finishBusJob(src)
             TriggerClientEvent('qbx_busjob_new:client:deleteVehicle', src, data.busNetId)
             DeleteEntity(veh)
         end
+        
+        -- Очищаем видимость автобуса
+        cleanupBusVisibility(data.busNetId)
+        
+        -- Очищаем пассажиров автобуса
+        clearAllServerPassengers(data.busNetId)
     end
 
     -- Возврат залога
@@ -386,6 +418,9 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
     -- Увеличиваем счетчик маршрута
     incrementRouteBusCount(selectedRoute.id)
 
+    -- Вычисляем ID следующей остановки
+    local nextStopId = getNextStopId(selectedRoute, 1)
+    
     -- Сохранение данных игрока
     playerData[src] = {
         working = true,
@@ -396,11 +431,14 @@ RegisterNetEvent('qbx_busjob_new:server:requestBus', function(busIndex, routeId)
         lastStopTime = os.time(),
         earnings = 0,
         startTime = os.time(),
-        spawnLocation = spawnLocation -- Сохраняем координаты спавна для дебага
+        spawnLocation = spawnLocation, -- Сохраняем координаты спавна для дебага
+        nextStopId = nextStopId -- Добавляем ID следующей остановки для синхронизации
     }
 
     -- Отправка данных клиенту
     TriggerClientEvent('qbx_busjob_new:client:startWork', src, netId, deposit, routeId)
+    
+    -- Новая система автоматически подхватит автобус в периодическом потоке
 
     if config.logging.enabled then
         logToConsole(
@@ -637,6 +675,21 @@ RegisterNetEvent('qbx_busjob_new:server:reachedStop', function(stopIndex)
     playerData[src].earnings = playerData[src].earnings + payment
     playerData[src].lastStopTime = os.time()
 
+    -- Обновляем данные об остановке (новая система автоматически синхронизирует)
+    local data = playerData[src]
+    local newCurrentStop = stopIndex + 1
+    
+    data.currentStop = newCurrentStop
+    
+    -- Вычисляем новую следующую остановку
+    if newCurrentStop > #data.currentRoute.stops then
+        -- Кольцевой маршрут - начинаем с первой остановки
+        data.currentStop = 1
+        data.nextStopId = getNextStopId(data.currentRoute, 1)
+    else
+        data.nextStopId = getNextStopId(data.currentRoute, newCurrentStop)
+    end
+
     -- Отправка уведомления клиенту
     TriggerClientEvent('qbx_busjob_new:client:receivePayment', src, payment)
 
@@ -678,39 +731,106 @@ RegisterNetEvent('qbx_busjob_new:server:completedRoute', function()
     end
 end)
 
--- Посадка пассажира
-RegisterNetEvent('qbx_busjob_new:server:passengerBoarded', function(payment)
-    local src = source
-    local player = exports.qbx_core:GetPlayer(src)
-
-    if not player or not playerData[src] or not playerData[src].working then return end
-
-    -- Проверка на валидность оплаты
-    if payment < sharedConfig.passengerSettings.passengerPayment.min or
-        payment > sharedConfig.passengerSettings.passengerPayment.max then
-        DropPlayer(src, 'Читы: Неверная сумма оплаты за пассажира')
-        return
-    end
-
-    -- Выдача денег
-    player.Functions.AddMoney(config.payment.type, payment, 'bus-job-passenger')
-    playerData[src].earnings = playerData[src].earnings + payment
-
-    -- Отправка уведомления клиенту
-    TriggerClientEvent('qbx_busjob_new:client:receivePassengerPayment', src, payment)
-
-    if config.logging.logPayments then
-        logToConsole(
-            'Оплата за пассажира',
-            ('Игрок %s получил $%d за посадку пассажира'):format(GetPlayerName(src), payment)
-        )
-    end
-end)
+-- Старое событие посадки пассажира удалено - теперь обрабатывается в серверной системе пассажиров
 
 -- Завершение работы
 RegisterNetEvent('qbx_busjob_new:server:endWork', function()
     finishBusJob(source)
 end)
+
+-- Функции управления видимостью автобусов
+local function addPlayerToBusVisibility(busNetId, playerId, busData)
+    if not busVisibility[busNetId] then
+        busVisibility[busNetId] = {
+            visibleTo = {},
+            lastUpdate = os.time()
+        }
+    end
+    
+    -- Добавляем игрока в список видимости и сохраняем отправленные данные
+    busVisibility[busNetId].visibleTo[playerId] = {
+        routeId = busData.routeId,
+        nextStopId = busData.nextStopId,
+        sentAt = os.time()
+    }
+    
+    -- Отправляем данные игроку
+    TriggerClientEvent('qbx_busjob_new:client:updateBusInfo', 
+        playerId, 
+        busNetId, 
+        busData.routeId, 
+        busData.nextStopId, 
+        busData.ownerId
+    )
+end
+
+local function removePlayerFromBusVisibility(busNetId, playerId)
+    if not busVisibility[busNetId] or not busVisibility[busNetId].visibleTo[playerId] then
+        return
+    end
+    
+    -- Удаляем игрока из списка видимости
+    busVisibility[busNetId].visibleTo[playerId] = nil
+    
+    -- Отправляем nil для очистки на клиенте
+    TriggerClientEvent('qbx_busjob_new:client:updateBusInfo', 
+        playerId, 
+        busNetId, 
+        nil, 
+        nil, 
+        nil
+    )
+    
+    -- Если больше никто не видит автобус, удаляем запись
+    if next(busVisibility[busNetId].visibleTo) == nil then
+        busVisibility[busNetId] = nil
+    end
+end
+
+local function updateBusVisibilityData(busNetId, busData)
+    if not busVisibility[busNetId] then return end
+    
+    busVisibility[busNetId].lastUpdate = os.time()
+    
+    -- Обновляем данные для всех видящих игроков
+    for playerId, lastSentData in pairs(busVisibility[busNetId].visibleTo) do
+        -- Проверяем, изменились ли данные
+        if lastSentData.routeId ~= busData.routeId or lastSentData.nextStopId ~= busData.nextStopId then
+            -- Обновляем кэш
+            busVisibility[busNetId].visibleTo[playerId] = {
+                routeId = busData.routeId,
+                nextStopId = busData.nextStopId,
+                sentAt = os.time()
+            }
+            
+            -- Отправляем обновленные данные
+            TriggerClientEvent('qbx_busjob_new:client:updateBusInfo', 
+                playerId, 
+                busNetId, 
+                busData.routeId, 
+                busData.nextStopId, 
+                busData.ownerId
+            )
+        end
+    end
+end
+
+local function cleanupBusVisibility(busNetId)
+    if busVisibility[busNetId] then
+        -- Уведомляем всех видящих игроков об удалении автобуса
+        for playerId in pairs(busVisibility[busNetId].visibleTo) do
+            TriggerClientEvent('qbx_busjob_new:client:updateBusInfo', 
+                playerId, 
+                busNetId, 
+                nil, 
+                nil, 
+                nil
+            )
+        end
+        busVisibility[busNetId] = nil
+    end
+end
+
 
 -- Callback для получения количества автобусов на маршрутах
 lib.callback.register('qbx_busjob_new:server:getRouteBusCount', function(source)
@@ -748,6 +868,12 @@ RegisterNetEvent('QBCore:Server:OnPlayerUnload', function()
                 exports.qbx_vehiclekeys:RemoveKeys(src, veh, true)
                 DeleteEntity(veh)
             end
+            
+            -- Очищаем видимость автобуса
+            cleanupBusVisibility(playerData[src].busNetId)
+            
+            -- Очищаем пассажиров автобуса
+            clearAllServerPassengers(playerData[src].busNetId)
         end
 
         if config.logging.enabled then
@@ -780,6 +906,12 @@ AddEventHandler('playerDropped', function()
                 TriggerClientEvent('qbx_busjob_new:client:deleteVehicle', src, playerData[src].busNetId)
                 DeleteEntity(veh)
             end
+            
+            -- Очищаем видимость автобуса
+            cleanupBusVisibility(playerData[src].busNetId)
+            
+            -- Очищаем пассажиров автобуса
+            clearAllServerPassengers(playerData[src].busNetId)
         end
 
         if config.logging.enabled then
@@ -822,6 +954,12 @@ AddEventHandler('onResourceStop', function(resourceName)
                 print(string.format('^3[BUS JOB] ^2Удален автобус игрока %s (NetID: %d)^0',
                     GetPlayerName(playerId) or 'Unknown', data.busNetId))
             end
+            
+            -- Очищаем видимость автобуса
+            cleanupBusVisibility(data.busNetId)
+            
+            -- Очищаем пассажиров автобуса
+            clearAllServerPassengers(data.busNetId)
 
             if player then
                 -- Возврат залога
@@ -867,8 +1005,452 @@ AddEventHandler('onResourceStop', function(resourceName)
     -- Очищаем все данные
     playerData = {}
     routeBusCount = {}
+    busVisibility = {}
+    serverPassengers = {}
 
     print(string.format('^3[BUS JOB] ^1Ресурс остановлен. Удалено %d автобусов. Все активные работы завершены.^0',
         cleanupCount))
+end)
+
+-- Периодический поток управления видимостью автобусов
+CreateThread(function()
+    while true do
+        Wait(2000) -- Проверяем каждые 2 секунды
+        
+        local maxDistance = config.networking and config.networking.busInfoUpdateDistance or 300.0
+        local allPlayers = GetPlayers()
+        
+        -- Проходим по всем работающим водителям
+        for src, data in pairs(playerData) do
+            if data.working and data.busNetId then
+                local busNetId = data.busNetId
+                local busEntity = NetworkGetEntityFromNetworkId(busNetId)
+                
+                if DoesEntityExist(busEntity) then
+                    local busCoords = GetEntityCoords(busEntity)
+                    local busData = {
+                        routeId = data.currentRoute.id,
+                        nextStopId = data.nextStopId,
+                        ownerId = src
+                    }
+                    
+                    -- Получаем текущий список видимости
+                    local currentlyVisible = busVisibility[busNetId] and busVisibility[busNetId].visibleTo or {}
+                    local shouldBeVisible = {}
+                    
+                    -- Определяем кто должен видеть автобус
+                    for _, playerId in ipairs(allPlayers) do
+                        local targetId = tonumber(playerId)
+                        if targetId ~= src then -- Водитель сам себя не видит
+                            local targetPed = GetPlayerPed(targetId)
+                            if targetPed and DoesEntityExist(targetPed) then
+                                local targetCoords = GetEntityCoords(targetPed)
+                                local distance = #(busCoords - targetCoords)
+                                
+                                if distance <= maxDistance then
+                                    shouldBeVisible[targetId] = true
+                                end
+                            end
+                        end
+                    end
+                    
+                    -- Добавляем новых игроков в зону видимости
+                    for playerId in pairs(shouldBeVisible) do
+                        if not currentlyVisible[playerId] then
+                            addPlayerToBusVisibility(busNetId, playerId, busData)
+                        end
+                    end
+                    
+                    -- Удаляем игроков вышедших из зоны видимости
+                    for playerId in pairs(currentlyVisible) do
+                        if not shouldBeVisible[playerId] then
+                            removePlayerFromBusVisibility(busNetId, playerId)
+                        end
+                    end
+                    
+                    -- Обновляем данные для видящих игроков (если изменились)
+                    if busVisibility[busNetId] then
+                        updateBusVisibilityData(busNetId, busData)
+                    end
+                else
+                    -- Автобус больше не существует, очищаем видимость
+                    cleanupBusVisibility(busNetId)
+                end
+            end
+        end
+    end
+end)
+
+-- Система серверных пассажиров
+local serverPassengers = {} -- [busNetId] = {waitingPassengers = {}, onboardPassengers = {}}
+
+-- Функция для генерации безопасных координат рядом с остановкой
+local function getSafePassengerSpawnCoords(stopCoords, stopHeading)
+    local attempts = 0
+    local maxAttempts = 10
+    local spawnDistance = sharedConfig.passengerSettings.spawnDistance
+    
+    while attempts < maxAttempts do
+        -- Генерируем угол перпендикулярно направлению остановки для спавна сбоку
+        local sideAngle = math.rad(stopHeading + 90 + math.random(-45, 45)) -- Боковое направление с разбросом
+        local distance = math.random(spawnDistance * 0.5, spawnDistance) -- Случайное расстояние
+        
+        local spawnX = stopCoords.x + math.cos(sideAngle) * distance
+        local spawnY = stopCoords.y + math.sin(sideAngle) * distance
+        
+        -- Получаем высоту земли
+        local foundGround, groundZ = GetGroundZFor_3dCoord(spawnX, spawnY, stopCoords.z + 10.0, false)
+        local spawnZ = foundGround and groundZ or stopCoords.z
+        
+        -- Проверяем что координаты не на дороге
+        local roadNode = GetClosestVehicleNode(spawnX, spawnY, spawnZ, 1)
+        if roadNode then
+            local roadCoords = vec3(GetVehicleNodePosition(roadNode))
+            local distanceToRoad = #(vec3(spawnX, spawnY, spawnZ) - roadCoords)
+            
+            -- Если далеко от дороги - хорошие координаты
+            if distanceToRoad > 5.0 then
+                return vec3(spawnX, spawnY, spawnZ), math.random(0, 360)
+            end
+        else
+            -- Если нет дороги рядом - тоже хорошо
+            return vec3(spawnX, spawnY, spawnZ), math.random(0, 360)
+        end
+        
+        attempts = attempts + 1
+    end
+    
+    -- Если не смогли найти безопасные координаты, используем базовые с небольшим смещением
+    local fallbackAngle = math.rad(stopHeading + 90)
+    local fallbackX = stopCoords.x + math.cos(fallbackAngle) * spawnDistance
+    local fallbackY = stopCoords.y + math.sin(fallbackAngle) * spawnDistance
+    local foundGround, groundZ = GetGroundZFor_3dCoord(fallbackX, fallbackY, stopCoords.z + 10.0, false)
+    local fallbackZ = foundGround and groundZ or stopCoords.z
+    
+    return vec3(fallbackX, fallbackY, fallbackZ), math.random(0, 360)
+end
+
+-- Функция для получения случайной модели пассажира
+local function getRandomPassengerModel()
+    local gender = math.random(1, 2) == 1 and 'male' or 'female'
+    local models = sharedConfig.passengerModels[gender]
+    return models[math.random(1, #models)]
+end
+
+-- Функция для создания ожидающих пассажиров на сервере
+local function createServerWaitingPassengers(busNetId, stopCoords, stopHeading, stopIndex, routeStops)
+    if not serverPassengers[busNetId] then
+        serverPassengers[busNetId] = {waitingPassengers = {}, onboardPassengers = {}}
+    end
+    
+    -- Очищаем старых ожидающих пассажиров
+    for _, passenger in pairs(serverPassengers[busNetId].waitingPassengers) do
+        if DoesEntityExist(passenger.ped) then
+            DeleteEntity(passenger.ped)
+        end
+    end
+    serverPassengers[busNetId].waitingPassengers = {}
+    
+    -- Проверяем шанс спавна пассажиров
+    if math.random(100) > sharedConfig.passengerSettings.passengerSpawnChance then
+        return
+    end
+    
+    local numPassengers = math.random(
+        sharedConfig.passengerSettings.minPassengersPerStop,
+        sharedConfig.passengerSettings.maxPassengersPerStop
+    )
+    
+    for i = 1, numPassengers do
+        local model = getRandomPassengerModel()
+        
+        -- Генерируем безопасные координаты
+        local spawnCoords, spawnHeading = getSafePassengerSpawnCoords(stopCoords, stopHeading)
+        
+        -- Создаем педа на сервере (видимого всем)
+        local passenger = CreatePed(4, model, spawnCoords.x, spawnCoords.y, spawnCoords.z, spawnHeading, true, false)
+        
+        -- Ждем создания педа
+        local attempts = 0
+        while not DoesEntityExist(passenger) and attempts < 50 do
+            Wait(10)
+            attempts = attempts + 1
+        end
+        
+        if DoesEntityExist(passenger) then
+            -- Настройка педа
+            SetEntityInvincible(passenger, true)
+            SetBlockingOfNonTemporaryEvents(passenger, true)
+            TaskStandStill(passenger, -1)
+            
+            -- Выбираем случайную целевую остановку (не текущую)
+            local targetStop = stopIndex
+            if routeStops and #routeStops > 1 then
+                local validStops = {}
+                for j, stop in ipairs(routeStops) do
+                    if j ~= stopIndex and stop.waitTime and stop.waitTime > 0 then
+                        validStops[#validStops + 1] = j
+                    end
+                end
+                
+                if #validStops > 0 then
+                    targetStop = validStops[math.random(1, #validStops)]
+                end
+            end
+            
+            -- Сохраняем информацию о пассажире
+            serverPassengers[busNetId].waitingPassengers[#serverPassengers[busNetId].waitingPassengers + 1] = {
+                ped = passenger,
+                targetStop = targetStop,
+                netId = NetworkGetNetworkIdFromEntity(passenger)
+            }
+            
+            if config.logging.enabled then
+                logToConsole(
+                    'Спавн пассажира',
+                    ('Создан пассажир на остановке %d для автобуса %d'):format(stopIndex, busNetId)
+                )
+            end
+        else
+            if config.logging.enabled then
+                logToConsole(
+                    'Ошибка спавна пассажира',
+                    ('Не удалось создать пассажира для автобуса %d'):format(busNetId)
+                )
+            end
+        end
+    end
+end
+
+-- Функция для посадки пассажиров
+local function boardServerPassengers(src, busNetId)
+    if not serverPassengers[busNetId] or #serverPassengers[busNetId].waitingPassengers == 0 then
+        return
+    end
+    
+    local busEntity = NetworkGetEntityFromNetworkId(busNetId)
+    if not DoesEntityExist(busEntity) then
+        return
+    end
+    
+    local maxSeats = GetVehicleModelNumberOfSeats(GetEntityModel(busEntity))
+    local boardedCount = 0
+    
+    -- Получаем список занятых мест
+    local occupiedSeats = {}
+    for _, passenger in pairs(serverPassengers[busNetId].onboardPassengers) do
+        occupiedSeats[passenger.seatIndex] = true
+    end
+    
+    for i, waitingPassenger in pairs(serverPassengers[busNetId].waitingPassengers) do
+        -- Ищем свободное место
+        local seatIndex = nil
+        for seat = 0, maxSeats - 1 do
+            if seat ~= -1 and not occupiedSeats[seat] and IsVehicleSeatFree(busEntity, seat) then
+                seatIndex = seat
+                occupiedSeats[seat] = true
+                break
+            end
+        end
+        
+        if seatIndex then
+            -- Сажаем пассажира в автобус
+            TaskEnterVehicle(waitingPassenger.ped, busEntity, -1, seatIndex, 1.0, 0)
+            
+            -- Переносим в список пассажиров в автобусе
+            serverPassengers[busNetId].onboardPassengers[#serverPassengers[busNetId].onboardPassengers + 1] = {
+                ped = waitingPassenger.ped,
+                seatIndex = seatIndex,
+                targetStop = waitingPassenger.targetStop,
+                netId = waitingPassenger.netId
+            }
+            
+            boardedCount = boardedCount + 1
+            
+            -- Оплата за пассажира
+            local payment = math.random(
+                sharedConfig.passengerSettings.passengerPayment.min,
+                sharedConfig.passengerSettings.passengerPayment.max
+            )
+            
+            local player = exports.qbx_core:GetPlayer(src)
+            if player then
+                player.Functions.AddMoney(config.payment.type, payment, 'bus-job-passenger')
+                playerData[src].earnings = playerData[src].earnings + payment
+                
+                -- Уведомляем клиента
+                TriggerClientEvent('qbx_busjob_new:client:receivePassengerPayment', src, payment)
+            end
+            
+            if config.logging.enabled then
+                logToConsole(
+                    'Посадка пассажира',
+                    ('Пассажир сел в автобус %d, место %d, оплата $%d'):format(busNetId, seatIndex, payment)
+                )
+            end
+        else
+            -- Удаляем пассажира если нет места
+            if DoesEntityExist(waitingPassenger.ped) then
+                DeleteEntity(waitingPassenger.ped)
+            end
+        end
+    end
+    
+    -- Очищаем список ожидающих
+    serverPassengers[busNetId].waitingPassengers = {}
+    
+    if boardedCount > 0 then
+        lib.notify(src, {
+            title = 'Посадка пассажиров',
+            description = ('Сели %d пассажиров'):format(boardedCount),
+            type = 'success'
+        })
+    end
+end
+
+-- Функция для высадки пассажиров
+local function alightServerPassengers(src, busNetId, currentStopIndex)
+    if not serverPassengers[busNetId] or #serverPassengers[busNetId].onboardPassengers == 0 then
+        return
+    end
+    
+    local passengersToRemove = {}
+    local alightedCount = 0
+    
+    for i, passenger in pairs(serverPassengers[busNetId].onboardPassengers) do
+        local shouldExit = false
+        
+        -- Пассажир выходит если это его остановка или по случайности
+        if passenger.targetStop == currentStopIndex then
+            shouldExit = true
+        elseif math.random(100) <= sharedConfig.passengerSettings.exitChance then
+            shouldExit = true
+        end
+        
+        if shouldExit then
+            -- Высаживаем пассажира
+            if DoesEntityExist(passenger.ped) then
+                local busEntity = NetworkGetEntityFromNetworkId(busNetId)
+                if DoesEntityExist(busEntity) then
+                    TaskLeaveVehicle(passenger.ped, busEntity, 0)
+                end
+                
+                -- Удаляем пассажира через некоторое время
+                SetTimeout(5000, function()
+                    if DoesEntityExist(passenger.ped) then
+                        DeleteEntity(passenger.ped)
+                    end
+                end)
+            end
+            
+            passengersToRemove[#passengersToRemove + 1] = i
+            alightedCount = alightedCount + 1
+            
+            if passenger.targetStop == currentStopIndex then
+                lib.notify(src, {
+                    title = 'Пассажир вышел',
+                    description = 'Пассажир добрался до пункта назначения',
+                    type = 'info'
+                })
+            end
+            
+            if config.logging.enabled then
+                logToConsole(
+                    'Высадка пассажира',
+                    ('Пассажир вышел из автобуса %d на остановке %d'):format(busNetId, currentStopIndex)
+                )
+            end
+        end
+    end
+    
+    -- Удаляем пассажиров из списка (в обратном порядке)
+    for i = #passengersToRemove, 1, -1 do
+        table.remove(serverPassengers[busNetId].onboardPassengers, passengersToRemove[i])
+    end
+    
+    if alightedCount > 0 then
+        lib.notify(src, {
+            title = 'Высадка пассажиров',
+            description = ('Вышли %d пассажиров'):format(alightedCount),
+            type = 'info'
+        })
+    end
+end
+
+-- Функция для очистки всех пассажиров автобуса
+local function clearAllServerPassengers(busNetId)
+    if not serverPassengers[busNetId] then
+        return
+    end
+    
+    -- Удаляем ожидающих пассажиров
+    for _, passenger in pairs(serverPassengers[busNetId].waitingPassengers) do
+        if DoesEntityExist(passenger.ped) then
+            DeleteEntity(passenger.ped)
+        end
+    end
+    
+    -- Удаляем пассажиров в автобусе
+    for _, passenger in pairs(serverPassengers[busNetId].onboardPassengers) do
+        if DoesEntityExist(passenger.ped) then
+            DeleteEntity(passenger.ped)
+        end
+    end
+    
+    -- Очищаем структуру данных
+    serverPassengers[busNetId] = nil
+    
+    if config.logging.enabled then
+        logToConsole(
+            'Очистка пассажиров',
+            ('Удалены все пассажиры автобуса %d'):format(busNetId)
+        )
+    end
+end
+
+-- События для управления пассажирами
+RegisterNetEvent('qbx_busjob_new:server:createPassengers', function(stopIndex)
+    local src = source
+    local data = playerData[src]
+    
+    if not data or not data.working or not data.busNetId or not data.currentRoute then
+        return
+    end
+    
+    local stop = data.currentRoute.stops[stopIndex]
+    if not stop or not stop.waitTime or stop.waitTime <= 0 then
+        return
+    end
+    
+    -- Создаем пассажиров на сервере
+    createServerWaitingPassengers(
+        data.busNetId,
+        stop.coords,
+        stop.heading or 0,
+        stopIndex,
+        data.currentRoute.stops
+    )
+end)
+
+RegisterNetEvent('qbx_busjob_new:server:boardPassengers', function()
+    local src = source
+    local data = playerData[src]
+    
+    if not data or not data.working or not data.busNetId then
+        return
+    end
+    
+    boardServerPassengers(src, data.busNetId)
+end)
+
+RegisterNetEvent('qbx_busjob_new:server:alightPassengers', function(stopIndex)
+    local src = source
+    local data = playerData[src]
+    
+    if not data or not data.working or not data.busNetId then
+        return
+    end
+    
+    alightServerPassengers(src, data.busNetId, stopIndex)
 end)
 

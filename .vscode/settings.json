@@ -1,0 +1,10 @@
+{
+    "Lua.workspace.library": [
+        "c:\\Users\\Admin\\.vscode\\extensions\\ilka.umbrella-vscode-1.1.36\\plugin\\library\\runtime",
+        "c:\\Users\\Admin\\.vscode\\extensions\\ilka.umbrella-vscode-1.1.36\\plugin\\library\\natives\\umbrella",
+        "c:\\Users\\Admin\\.vscode\\extensions\\ilka.umbrella-vscode-1.1.37\\plugin\\library\\runtime",
+        "c:\\Users\\Admin\\.vscode\\extensions\\ilka.umbrella-vscode-1.1.37\\plugin\\library\\natives\\umbrella"
+    ],
+    "Lua.workspace.checkThirdParty": false,
+    "Lua.runtime.nonstandardSymbol": []
+}

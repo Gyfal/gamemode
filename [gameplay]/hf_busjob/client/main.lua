@@ -41,7 +41,44 @@ local markerThread = nil -- Поток отрисовки маркера
 
 -- Переменные для 3D текста на автобусах
 local busTextThread = nil -- Поток отрисовки текста на автобусах
-local activeBuses = {} -- Таблица активных автобусов других игроков {[vehicleEntity] = {routeName = "...", stopInfo = "..."}}
+local activeBuses = {} -- Таблица активных автобусов других игроков {[vehicleEntity] = {routeId = 1, nextStopId = 1}}
+
+-- Функция для получения следующей остановки с ID
+local function getNextStopInfo(route, currentStopId)
+    if not route or not route.stops then return nil end
+    
+    currentStopId = currentStopId or currentStop
+    
+    -- Ищем следующую остановку с названием
+    for i = currentStopId, #route.stops do
+        local stop = route.stops[i]
+        if stop.waitTime and stop.waitTime > 0 then
+            return {
+                name = stop.stopName or "Остановка",
+                id = i
+            }
+        end
+    end
+    
+    -- Если не нашли впереди, ищем с начала (кольцевой маршрут)
+    for i = 1, currentStopId - 1 do
+        local stop = route.stops[i]
+        if stop.waitTime and stop.waitTime > 0 then
+            return {
+                name = stop.stopName or "Остановка", 
+                id = i
+            }
+        end
+    end
+    
+    return nil
+end
+
+-- Функция для получения названия следующей остановки (для совместимости)
+local function getNextStopName()
+    local info = getNextStopInfo(currentRoute, currentStop)
+    return info and info.name, info and info.id
+end
 
 -- Функции для маркеров
 local startStopMarkerThread, stopStopMarkerThread
@@ -217,7 +254,8 @@ local function startBusTextThread()
                     })
                     
                     -- Отображаем информацию об остановке
-                    local stopInfo = 'Остановка ' .. currentStop .. '/' .. #currentRoute.stops
+                    local nextStopName = getNextStopName()
+                    local stopInfo = nextStopName and ('Следует к: ' .. nextStopName) or ('Точка ' .. currentStop .. '/' .. #currentRoute.stops)
                     local stopTextCoords = busCoords + vector3(0.0, 0.0, 3.0)
                     qbx.drawText3d({
                         coords = stopTextCoords,
@@ -239,32 +277,54 @@ local function startBusTextThread()
                     
                     -- Отображаем текст только если автобус близко
                     if distance < 100 then 
-                        -- Получаем позицию над автобусом
-                        local textCoords = busCoords + vector3(0.0, 0.0, 3.5)
+                        -- Получаем маршрут по ID
+                        local route = nil
+                        for _, r in ipairs(sharedConfig.busRoutes) do
+                            if r.id == info.routeId then
+                                route = r
+                                break
+                            end
+                        end
                         
-                        -- Отображаем информацию о маршруте
-                        qbx.drawText3d({
-                            coords = textCoords,
-                            text = info.routeName,
-                            scale = 0.5,
-                            font = 4,
-                            color = vec4(255, 255, 0, 255), -- Желтый цвет
-                            enableOutline = true,
-                            disableDrawRect = true
-                        })
-                        
-                        -- Отображаем информацию об остановке ниже
-                        if info.stopInfo then
-                            local stopTextCoords = busCoords + vector3(0.0, 0.0, 3.0)
+                        if route then
+                            -- Получаем позицию над автобусом
+                            local textCoords = busCoords + vector3(0.0, 0.0, 3.5)
+                            
+                            -- Отображаем информацию о маршруте
                             qbx.drawText3d({
-                                coords = stopTextCoords,
-                                text = info.stopInfo,
+                                coords = textCoords,
+                                text = route.name,
                                 scale = 0.5,
-                                font = 3,
-                                color = vec4(255, 255, 255, 255), -- Белый цвет
+                                font = 4,
+                                color = vec4(255, 255, 0, 255), -- Желтый цвет
                                 enableOutline = true,
                                 disableDrawRect = true
                             })
+                            
+                            -- Получаем информацию о следующей остановке
+                            local nextStopInfo = nil
+                            if info.nextStopId and info.nextStopId > 0 then
+                                local stop = route.stops[info.nextStopId]
+                                if stop and stop.stopName then
+                                    nextStopInfo = 'Следует к: ' .. stop.stopName
+                                else
+                                    nextStopInfo = 'Следует к: Остановка'
+                                end
+                            end
+                            
+                            -- Отображаем информацию об остановке ниже
+                            if nextStopInfo then
+                                local stopTextCoords = busCoords + vector3(0.0, 0.0, 3.0)
+                                qbx.drawText3d({
+                                    coords = stopTextCoords,
+                                    text = nextStopInfo,
+                                    scale = 0.4,
+                                    font = 4,
+                                    color = vec4(255, 255, 255, 255), -- Белый цвет
+                                    enableOutline = true,
+                                    disableDrawRect = true
+                                })
+                            end
                         end
                     end
                 else
@@ -365,7 +425,7 @@ openRouteMenu = function()
             local isAvailable = busCount < maxBuses
             
             options[#options + 1] = {
-                title = route.name .. ' [' .. busCount .. '/' .. maxBuses .. ']',
+                title = i .. ') '.. route.name .. ' [' .. busCount .. '/' .. maxBuses .. ']',
                 description = route.description .. ' (' .. #route.stops .. ' точек)',
                 icon = 'route',
                 disabled = not isAvailable,
@@ -427,67 +487,9 @@ openBusMenu = function()
     lib.showContext('bus_selection_menu')
 end
 
--- Функции для работы с пассажирами
-local function getRandomPassengerModel()
-    local gender = math.random(1, 2) == 1 and 'male' or 'female'
-    local models = sharedConfig.passengerModels[gender]
-    return models[math.random(1, #models)]
-end
-
-local function createWaitingPassengers(stopCoords)
-    if not currentRoute then return end
-    
-    if math.random(100) > sharedConfig.passengerSettings.passengerSpawnChance then
-        return
-    end
-
-    local numPassengers = math.random(
-        sharedConfig.passengerSettings.minPassengersPerStop,
-        sharedConfig.passengerSettings.maxPassengersPerStop
-    )
-
-    for i = 1, numPassengers do
-        local model = getRandomPassengerModel()
-        lib.requestModel(model, 10000)
-
-        -- Спавн рядом с остановкой
-        local spawnCoords = stopCoords + vector3(
-            math.random(-5, 5),
-            math.random(-5, 5),
-            0
-        )
-
-        local passenger = CreatePed(4, model, spawnCoords.x, spawnCoords.y, spawnCoords.z, 0.0, false, true)
-
-        -- Настройка педа
-        SetEntityInvincible(passenger, true)
-        SetBlockingOfNonTemporaryEvents(passenger, true)
-        TaskStandStill(passenger, -1)
-
-        -- Случайная целевая остановка (не текущая)
-        local targetStop = currentStop
-        if currentRoute and #currentRoute.stops > 1 then
-            targetStop = math.random(1, #currentRoute.stops)
-            while targetStop == currentStop do
-                targetStop = math.random(1, #currentRoute.stops)
-            end
-        end
-
-        waitingPassengers[#waitingPassengers + 1] = {
-            ped = passenger,
-            targetStop = targetStop
-        }
-
-        SetModelAsNoLongerNeeded(model)
-    end
-end
-
+-- Функции для работы с пассажирами (теперь на сервере)
 local function clearWaitingPassengers()
-    for _, passenger in pairs(waitingPassengers) do
-        if DoesEntityExist(passenger.ped) then
-            DeletePed(passenger.ped)
-        end
-    end
+    -- Очищаем только локальные данные, пассажиры теперь управляются сервером
     waitingPassengers = {}
 end
 
@@ -572,9 +574,9 @@ local function updateCurrentStop()
     -- Очищаем предыдущих ожидающих пассажиров
     clearWaitingPassengers()
 
-    -- Создаем новых пассажиров только на остановках с временем ожидания
+    -- Создаем новых пассажиров только на остановках с временем ожидания (на сервере)
     if stop.waitTime and stop.waitTime > 0 then
-        createWaitingPassengers(stop.coords)
+        TriggerServerEvent('qbx_busjob_new:server:createPassengers', currentStop)
     end
     
     -- Запускаем отрисовку 3D маркера для остановки
@@ -617,12 +619,7 @@ local function updateCurrentStop()
     -- Создаем чекпоинт
     createCheckpoint()
     
-    -- Обновляем информацию для других игроков
-    if currentRoute and currentBus then
-        local busNetId = NetworkGetNetworkIdFromEntity(currentBus)
-        local stopInfo = 'Остановка ' .. currentStop .. '/' .. #currentRoute.stops
-        TriggerServerEvent('qbx_busjob_new:server:updateBusInfo', busNetId, currentRoute.name, stopInfo)
-    end
+    -- Сервер сам синхронизирует данные об автобусах
 
     -- Уведомление с улучшенной информацией
     local passengerCount = #waitingPassengers
@@ -779,15 +776,15 @@ function createBusStopZones()
                                 position = config.notifications.position
                             })
 
-                            -- Сначала высаживаем пассажиров
-                            alightPassengers()
+                            -- Сначала высаживаем пассажиров (на сервере)
+                            TriggerServerEvent('qbx_busjob_new:server:alightPassengers', currentStop)
 
                             -- Ждем немного перед посадкой новых
                             SetTimeout(2000, function()
                                 -- Проверяем что игрок все еще работает
                                 if not isWorking or not currentBus or not DoesEntityExist(currentBus) then return end
-                                -- Затем садим новых пассажиров
-                                boardPassengers()
+                                -- Затем садим новых пассажиров (на сервере)
+                                TriggerServerEvent('qbx_busjob_new:server:boardPassengers')
                             end)
                             
                             -- Отправка на сервер для оплаты за остановку
@@ -827,18 +824,20 @@ function createBusStopZones()
                 isInsideStopZone = false -- Сбрасываем флаг зоны
                 
                 if currentRoute and currentStop > #currentRoute.stops then
-                    -- Завершение маршрута
+                    -- Кольцевой маршрут - начинаем новый круг
                     TriggerServerEvent('qbx_busjob_new:server:completedRoute')
 
                     lib.notify({
-                        title = 'Маршрут завершен',
-                        description = 'Вы завершили маршрут! Заработано: $' .. totalEarnings,
+                        title = 'Круг завершен',
+                        description = 'Вы завершили круг! Заработано: $' .. totalEarnings .. '\nНачинается новый круг...',
                         type = 'success',
                         duration = 10000
                     })
                     
-                    -- Сброс для нового круга или завершение работы
-                    endWork()
+                    -- Сброс на первую остановку для нового круга
+                    currentStop = 1
+                    lastCompletedStop = 0 -- Сбрасываем для нового круга
+                    updateCurrentStop()
                 else
                     updateCurrentStop()
                 end
@@ -874,17 +873,14 @@ local function endWork()
     stopStopMarkerThread()
     isInsideStopZone = false
     
-    -- Удаляем наш автобус из списка активных для других игроков
-    if currentBus and DoesEntityExist(currentBus) then
-        local busNetId = NetworkGetNetworkIdFromEntity(currentBus)
-        TriggerServerEvent('qbx_busjob_new:server:updateBusInfo', busNetId, nil, nil)
-    end
+    -- Сервер сам удалит наш автобус из синхронизации при завершении работы
 
     -- Удаление всех зон остановок
     removeBusStopZones()
 
-    -- Очистка всех пассажиров
-    clearAllPassengers()
+    -- Очистка локальных данных пассажиров (сервер сам очистит серверных пассажиров)
+    passengers = {}
+    clearWaitingPassengers()
 
     -- Удаление автобуса
     if currentBus and DoesEntityExist(currentBus) then
@@ -949,101 +945,7 @@ function getAvailableSeat()
 end
 
 
-function boardPassengers()
-    if isProcessingPassengers or #waitingPassengers == 0 then return end
-
-    isProcessingPassengers = true
-
-    lib.notify({
-        title = 'Посадка пассажиров',
-        description = 'Пассажиры садятся в автобус...',
-        type = 'info'
-    })
-
-    for _, waitingPassenger in pairs(waitingPassengers) do
-        local seatIndex = getAvailableSeat()
-        if seatIndex then
-            -- Посадка пассажира
-            TaskEnterVehicle(waitingPassenger.ped, currentBus, -1, seatIndex, 1.0, 0)
-
-            -- Добавляем в список активных пассажиров
-            passengers[#passengers + 1] = {
-                ped = waitingPassenger.ped,
-                seatIndex = seatIndex,
-                targetStop = waitingPassenger.targetStop
-            }
-
-            -- Оплата за посадку пассажира
-            local payment = math.random(
-                sharedConfig.passengerSettings.passengerPayment.min,
-                sharedConfig.passengerSettings.passengerPayment.max
-            )
-            totalEarnings = totalEarnings + payment
-
-            TriggerServerEvent('qbx_busjob_new:server:passengerBoarded', payment)
-        else
-            -- Нет свободных мест - удаляем пассажира
-            DeletePed(waitingPassenger.ped)
-        end
-    end
-
-    waitingPassengers = {}
-
-    SetTimeout(sharedConfig.passengerSettings.animationTime, function()
-        isProcessingPassengers = false
-    end)
-end
-
-function alightPassengers()
-    if isProcessingPassengers then return end
-
-    local passengersToRemove = {}
-
-    for i, passenger in pairs(passengers) do
-        -- Проверяем нужно ли пассажиру выходить
-        if passenger.targetStop == currentStop or
-            math.random(100) <= sharedConfig.passengerSettings.exitChance then
-            -- Высадка пассажира
-            TaskLeaveVehicle(passenger.ped, currentBus, 0)
-
-            -- Помечаем для удаления
-            passengersToRemove[#passengersToRemove + 1] = i
-
-            -- Удаляем пассажира через некоторое время
-            SetTimeout(5000, function()
-                -- Проверяем что пед еще существует
-                if DoesEntityExist(passenger.ped) then
-                    DeletePed(passenger.ped)
-                end
-            end)
-
-            if passenger.targetStop == currentStop then
-                lib.notify({
-                    title = 'Пассажир вышел',
-                    description = 'Пассажир добрался до пункта назначения',
-                    type = 'info'
-                })
-            end
-        end
-    end
-
-    -- Удаляем пассажиров из списка (в обратном порядке)
-    for i = #passengersToRemove, 1, -1 do
-        table.remove(passengers, passengersToRemove[i])
-    end
-end
-
-function clearAllPassengers()
-    -- Удаляем всех пассажиров
-    for _, passenger in pairs(passengers) do
-        if DoesEntityExist(passenger.ped) then
-            DeletePed(passenger.ped)
-        end
-    end
-    passengers = {}
-
-    clearWaitingPassengers()
-end
+-- Старые функции пассажиров удалены - теперь используется серверная система
 
 -- Создание NPC для устройства на работу
 local function createJobNPC()
@@ -1118,17 +1020,17 @@ end
 
 
 -- Обработка обновления информации об автобусах других игроков
-RegisterNetEvent('qbx_busjob_new:client:updateBusInfo', function(busNetId, routeName, stopInfo, senderId)
+RegisterNetEvent('qbx_busjob_new:client:updateBusInfo', function(busNetId, routeId, nextStopId, senderId)
     -- Не обрабатываем собственные обновления
     if senderId == GetPlayerServerId(PlayerId()) then return end
     
     local bus = NetworkGetEntityFromNetworkId(busNetId)
     if DoesEntityExist(bus) then
-        if routeName and stopInfo then
+        if routeId and nextStopId then
             -- Добавляем или обновляем информацию
             activeBuses[bus] = {
-                routeName = routeName,
-                stopInfo = stopInfo
+                routeId = routeId,
+                nextStopId = nextStopId
             }
         else
             -- Удаляем автобус если нет информации (водитель закончил работу)
@@ -1220,10 +1122,7 @@ RegisterNetEvent('qbx_busjob_new:client:startWork', function(busNetId, deposit, 
     -- Устанавливаем isWorking = true ПОСЛЕ запуска цикла
     isWorking = true
     
-    -- Отправляем информацию о нашем автобусе другим игрокам
-    if currentRoute then
-        TriggerServerEvent('qbx_busjob_new:server:updateBusInfo', busNetId, currentRoute.name, 'Остановка 1/' .. #currentRoute.stops)
-    end
+    -- Сервер сам синхронизирует данные об автобусах
 
     lib.notify({
         title = 'Работа начата',

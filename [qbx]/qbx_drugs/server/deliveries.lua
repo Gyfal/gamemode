@@ -1,6 +1,18 @@
 local config = require 'config.server'
 local sharedConfig = require 'config.shared'
 
+-- Create dealers table if not exists
+MySQL.query([[
+    CREATE TABLE IF NOT EXISTS `dealers` (
+        `id` int(11) NOT NULL AUTO_INCREMENT,
+        `name` varchar(50) NOT NULL DEFAULT '0',
+        `coords` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+        `time` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+        `createdby` varchar(50) NOT NULL DEFAULT '0',
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4;
+]])
+
 exports('GetDealers', function()
     return sharedConfig.dealers
 end)

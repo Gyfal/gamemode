@@ -1,12 +1,6 @@
 {
-    "github.copilot.advanced": {
-        "authProvider": "github"
-    },
-    "editor.inlineSuggest.suppressSuggestions": true,
-    "security.workspace.trust.untrustedFiles": "open",
-    "workbench.colorTheme": "One Dark Pro Flat",
-    "Lua.runtime.version": "Lua 5.4",
-    "Lua.workspace.ignoreDir": [
+  "Lua.runtime.version": "Lua 5.4",
+  "Lua.workspace.ignoreDir": [
         "!lib/",
         "!libstd/",
         ".vscode",
@@ -15,14 +9,27 @@
         "node_modules",
         "\\[cfx\\]"
     ],
-    "workbench.iconTheme": "material-icon-theme",
-    "Lua.runtime.plugin": "~\\AppData\\Roaming\\Cursor\\User\\globalStorage\\overextended.cfxlua-vscode\\plugin.lua",
-    "Lua.runtime.nonstandardSymbol": [],
-    "Lua.workspace.library": [
-        "~\\AppData\\Roaming\\Code\\User\\globalStorage\\overextended.cfxlua-vscode\\library\\runtime",
-        "~\\AppData\\Roaming\\Code\\User\\globalStorage\\overextended.cfxlua-vscode\\library\\natives\\CFX-NATIVE",
-        "~\\AppData\\Roaming\\Code\\User\\globalStorage\\overextended.cfxlua-vscode\\library\\natives\\GTAV"
+  "cfxlua.game": "gtav",
+  "Lua.runtime.plugin": "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\plugin.lua",
+  "Lua.runtime.nonstandardSymbol": [
+        "+=",
+        "-=",
+        "*=",
+        "/=",
+        "<<=",
+        ">>=",
+        "&=",
+        "|=",
+        "^=",
+        "/**/",
+        "`"
     ],
-    // "Lua.diagnostics.libraryFiles": "Enable",
-    "workspace.checkThirdParty": false
+    "Lua.workspace.library": [
+    "C:/src/qbox_types/types",
+    "C:/src/ox_types/types",
+    "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\runtime",
+    "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\natives\\CFX-NATIVE",
+    "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\natives\\GTAV",
+    "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\natives\\GTAV"
+  ]
 }

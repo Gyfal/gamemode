@@ -77,7 +77,7 @@ local function isPlayerNearLocation(src, coords, maxDistance)
 
     local ped = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(ped)
-    local distance = #(playerCoords - coords)
+    local distance = #(vector3(playerCoords.x, playerCoords.y, playerCoords.z) - vector3(coords.x, coords.y, coords.z))
 
     return distance <= (maxDistance or config.anticheat.maxDistance)
 end
@@ -925,92 +925,6 @@ AddEventHandler('playerDropped', function()
     end
 end)
 
--- Очистка при перезапуске ресурса
-AddEventHandler('onResourceStop', function(resourceName)
-    if GetCurrentResourceName() ~= resourceName then return end
-
-    print('^3[BUS JOB] ^2Начинаем очистку ресурса...^0')
-
-    -- Завершаем работу всем активным работникам
-    local cleanupCount = 0
-    for playerId, data in pairs(playerData) do
-        if data.working and data.busNetId then
-            local player = exports.qbx_core:GetPlayer(playerId)
-            local veh = NetworkGetEntityFromNetworkId(data.busNetId)
-
-            if DoesEntityExist(veh) then
-                -- Удаляем ключи если игрок онлайн
-                if player then
-                    exports.qbx_vehiclekeys:RemoveKeys(playerId, veh, true)
-                end
-
-                -- Уведомляем клиента о необходимости удалить автобус с его стороны
-                TriggerClientEvent('qbx_busjob_new:client:deleteVehicle', playerId, data.busNetId)
-
-                -- Удаляем автобус со стороны сервера
-                DeleteEntity(veh)
-                cleanupCount = cleanupCount + 1
-
-                print(string.format('^3[BUS JOB] ^2Удален автобус игрока %s (NetID: %d)^0',
-                    GetPlayerName(playerId) or 'Unknown', data.busNetId))
-            end
-            
-            -- Очищаем видимость автобуса
-            cleanupBusVisibility(data.busNetId)
-            
-            -- Очищаем пассажиров автобуса
-            clearAllServerPassengers(data.busNetId)
-
-            if player then
-                -- Возврат залога
-                if data.deposit > 0 then
-                    player.Functions.AddMoney('cash', data.deposit, 'bus-job-deposit-return-resource-stop')
-                    lib.notify(playerId, {
-                        title = 'Работа завершена',
-                        description = ('Залог возвращен: $%d'):format(data.deposit),
-                        type = 'info'
-                    })
-                else
-                    lib.notify(playerId, {
-                        title = 'Работа завершена',
-                        description = 'Работа завершена из-за перезапуска ресурса',
-                        type = 'info'
-                    })
-                end
-
-                -- Логирование
-                if config.logging.enabled then
-                    local workTime = os.time() - data.startTime
-                    logToConsole(
-                        'Завершение работы (остановка ресурса)',
-                        ('Игрок %s завершил работу. Заработано: $%d, Время: %d мин'):format(
-                            GetPlayerName(playerId),
-                            data.earnings,
-                            math.floor(workTime / 60)
-                        )
-                    )
-                end
-
-                -- Отправка события клиенту для очистки
-                TriggerClientEvent('qbx_busjob_new:client:endWork', playerId)
-            end
-            
-            -- Уменьшаем счетчик маршрута
-            if data.currentRoute then
-                decrementRouteBusCount(data.currentRoute.id)
-            end
-        end
-    end
-
-    -- Очищаем все данные
-    playerData = {}
-    routeBusCount = {}
-    busVisibility = {}
-    serverPassengers = {}
-
-    print(string.format('^3[BUS JOB] ^1Ресурс остановлен. Удалено %d автобусов. Все активные работы завершены.^0',
-        cleanupCount))
-end)
 
 -- Периодический поток управления видимостью автобусов
 CreateThread(function()
@@ -1045,7 +959,7 @@ CreateThread(function()
                             local targetPed = GetPlayerPed(targetId)
                             if targetPed and DoesEntityExist(targetPed) then
                                 local targetCoords = GetEntityCoords(targetPed)
-                                local distance = #(busCoords - targetCoords)
+                                local distance = #(vector3(busCoords.x, busCoords.y, busCoords.z) - vector3(targetCoords.x, targetCoords.y, targetCoords.z))
                                 
                                 if distance <= maxDistance then
                                     shouldBeVisible[targetId] = true
@@ -1106,7 +1020,7 @@ local function getSafePassengerSpawnCoords(stopCoords, stopHeading)
         local roadNode = GetClosestVehicleNode(spawnX, spawnY, spawnZ, 1)
         if roadNode then
             local roadCoords = vec3(GetVehicleNodePosition(roadNode))
-            local distanceToRoad = #(vec3(spawnX, spawnY, spawnZ) - roadCoords)
+            local distanceToRoad = #(vector3(spawnX, spawnY, spawnZ) - roadCoords)
             
             -- Если далеко от дороги - хорошие координаты
             if distanceToRoad > 5.0 then
@@ -1179,8 +1093,6 @@ local function createServerWaitingPassengers(busNetId, stopCoords, stopHeading, 
         
         if DoesEntityExist(passenger) then
             -- Настройка педа
-            SetEntityInvincible(passenger, true)
-            SetBlockingOfNonTemporaryEvents(passenger, true)
             TaskStandStill(passenger, -1)
             
             -- Выбираем случайную целевую остановку (не текущую)
@@ -1454,3 +1366,768 @@ RegisterNetEvent('qbx_busjob_new:server:alightPassengers', function(stopIndex)
     alightServerPassengers(src, data.busNetId, stopIndex)
 end)
 
+-- ===========================
+-- СИСТЕМА AI-АВТОБУСОВ
+-- ===========================
+
+local aiBusinesses = {} -- [routeId] = {buses = {[busId] = busData}}
+local aiBusIdCounter = 0
+
+-- Структура данных AI-автобуса
+local function createAIBusData(routeId, busId)
+    return {
+        id = busId,
+        routeId = routeId,
+        currentStopIndex = 1, -- Индекс текущей точки в маршруте
+        targetStopIndex = 1, -- Целевая остановка (для движения от спавна к маршруту)
+        virtualPosition = nil, -- Виртуальная позиция когда автобус не заспавнен
+        lastPositionUpdate = 0, -- Время последнего обновления позиции
+        state = 'virtual', -- 'virtual' или 'spawned'
+        status = 'Инициализация', -- Статус автобуса
+        vehicleNetId = nil, -- NetId когда автобус заспавнен
+        driverNetId = nil, -- NetId водителя
+        owner = 'server', -- Владелец автобуса
+        passengers = {}, -- Список пассажиров в AI-автобусе
+        blipId = nil, -- ID блипа на карте
+        nextStopTime = 0, -- Время прибытия на следующую остановку
+        waitingUntil = 0 -- Время до которого автобус ждет на остановке
+    }
+end
+
+-- Функция для расчета времени движения между точками
+local function calculateTravelTime(pos1, pos2, speed)
+    local distance = #(vector3(pos1.x, pos1.y, pos1.z) - vector3(pos2.x, pos2.y, pos2.z))
+    return (distance / speed) * 1000 -- в миллисекундах
+end
+
+-- Функция для получения следующего индекса остановки (кольцевой маршрут)
+local function getNextStopIndex(route, currentIndex)
+    if currentIndex >= #route.stops then
+        return 1 -- Возвращаемся к началу
+    end
+    return currentIndex + 1
+end
+
+-- Виртуальная симуляция движения автобуса
+local function simulateAIBusMovement(busData)
+    local route = sharedConfig.busRoutes[busData.routeId]
+    if not route then return end
+    
+    local currentTime = GetGameTimer()
+    
+    -- Если автобус ждет на остановке
+    if busData.waitingUntil > currentTime then
+        busData.status = 'На остановке'
+        return
+    else
+        busData.status = 'В пути'
+    end
+    
+    -- Специальный случай: автобус едет от спавна к первой точке маршрута
+    if busData.currentStopIndex == 0 then
+        local targetStop = route.stops[busData.targetStopIndex]
+        if not targetStop then return end
+        
+        -- Если впервые или достигли целевой точки
+        if not busData.virtualPosition or currentTime >= busData.nextStopTime then
+            -- Достигли первой точки маршрута
+            busData.virtualPosition = targetStop.coords
+            busData.currentStopIndex = busData.targetStopIndex
+            busData.status = 'В пути'
+            
+            -- Устанавливаем время ожидания если это остановка
+            if targetStop.waitTime and targetStop.waitTime > 0 then
+                busData.waitingUntil = currentTime + targetStop.waitTime
+            end
+            
+            -- Рассчитываем время до следующей точки
+            local nextIndex = getNextStopIndex(route, busData.currentStopIndex)
+            local nextStop = route.stops[nextIndex]
+            if nextStop then
+                local travelTime = calculateTravelTime(targetStop.coords, nextStop.coords, sharedConfig.aiBusinessSettings.averageSpeed)
+                busData.nextStopTime = currentTime + travelTime
+            end
+        else
+            -- Интерполируем движение от спавна к первой точке маршрута
+            local targetStop = route.stops[busData.targetStopIndex]
+            local totalTime = busData.nextStopTime - busData.lastPositionUpdate
+            local elapsed = currentTime - busData.lastPositionUpdate
+            local progress = math.min(elapsed / totalTime, 1.0)
+            
+            -- Интерполируем между текущей позицией и целевой
+            local currentPos = busData.virtualPosition
+            busData.virtualPosition = vec3(
+                currentPos.x + (targetStop.coords.x - currentPos.x) * progress,
+                currentPos.y + (targetStop.coords.y - currentPos.y) * progress,
+                currentPos.z + (targetStop.coords.z - currentPos.z) * progress
+            )
+        end
+        
+        busData.lastPositionUpdate = currentTime
+        return
+    end
+    
+    -- Обычная логика движения по маршруту
+    local currentStop = route.stops[busData.currentStopIndex]
+    local nextIndex = getNextStopIndex(route, busData.currentStopIndex)
+    local nextStop = route.stops[nextIndex]
+    
+    if not currentStop or not nextStop then return end
+    
+    -- Если впервые или достигли следующей точки
+    if not busData.virtualPosition or currentTime >= busData.nextStopTime then
+        -- Обновляем позицию
+        busData.virtualPosition = nextStop.coords
+        busData.currentStopIndex = nextIndex
+        
+        -- Если это остановка с ожиданием
+        if nextStop.waitTime and nextStop.waitTime > 0 then
+            busData.waitingUntil = currentTime + nextStop.waitTime
+            busData.nextStopTime = busData.waitingUntil
+        else
+            -- Рассчитываем время до следующей точки
+            local nextNextIndex = getNextStopIndex(route, nextIndex)
+            local nextNextStop = route.stops[nextNextIndex]
+            if nextNextStop then
+                local travelTime = calculateTravelTime(nextStop.coords, nextNextStop.coords, sharedConfig.aiBusinessSettings.averageSpeed)
+                busData.nextStopTime = currentTime + travelTime
+            end
+        end
+    else
+        -- Интерполируем позицию между точками
+        local progress = 1.0 - ((busData.nextStopTime - currentTime) / calculateTravelTime(currentStop.coords, nextStop.coords, sharedConfig.aiBusinessSettings.averageSpeed))
+        progress = math.max(0, math.min(1, progress))
+        
+        local x = currentStop.coords.x + (nextStop.coords.x - currentStop.coords.x) * progress
+        local y = currentStop.coords.y + (nextStop.coords.y - currentStop.coords.y) * progress
+        local z = currentStop.coords.z + (nextStop.coords.z - currentStop.coords.z) * progress
+        
+        busData.virtualPosition = vec3(x, y, z)
+    end
+    
+    busData.lastPositionUpdate = currentTime
+end
+
+-- Функция для создания AI-автобуса когда игрок рядом
+local function spawnAIBus(busData)
+    if busData.state == 'spawned' then return end
+    
+    local route = sharedConfig.busRoutes[busData.routeId]
+    if not route then return end
+    
+    -- Определяем heading для спавна
+    local heading = 0.0
+    if busData.currentStopIndex == 0 then
+        -- Автобус едет от спавна к первой точке маршрута
+        -- Используем heading из busSpawnLocations
+        local spawnLocationIndex = ((busData.id - 1) % #sharedConfig.busSpawnLocations) + 1
+        local spawnLocation = sharedConfig.busSpawnLocations[spawnLocationIndex]
+        heading = spawnLocation.w or 0.0
+    else
+        -- Обычная логика
+        local currentStop = route.stops[busData.currentStopIndex]
+        if not currentStop then return end
+        heading = currentStop.heading or 0.0
+    end
+    
+    -- Выбираем модель автобуса
+    local busModel = sharedConfig.busModels[1].model -- Используем первую модель
+    
+    -- Создаем водителя сначала
+    local driver = CreatePed(4, sharedConfig.aiBusinessSettings.driverModel, busData.virtualPosition.x, busData.virtualPosition.y, busData.virtualPosition.z + 2.0, 0.0, true, false)
+    
+    local attempts = 0
+    while not DoesEntityExist(driver) and attempts < 50 do
+        Wait(10)
+        attempts = attempts + 1
+    end
+    
+    if not DoesEntityExist(driver) then
+        if config.logging.enabled then
+            logToConsole('AI Автобус', 'Не удалось создать AI-водителя')
+        end
+        return
+    end
+    
+    -- Спавним автобус используя qbx.spawnVehicle (без автоматической телепортации)
+    local netId = qbx.spawnVehicle({
+        model = busModel,
+        spawnSource = vector4(busData.virtualPosition.x, busData.virtualPosition.y, busData.virtualPosition.z, heading),
+        warp = false -- Отключаем автоматическую телепортацию для ручного контроля
+    })
+    
+    if not netId then
+        DeleteEntity(driver)
+        if config.logging.enabled then
+            logToConsole('AI Автобус', 'Не удалось создать AI-автобус через qbx.spawnVehicle')
+        end
+        return
+    end
+    
+    -- Конвертируем netId в entity
+    local vehicle = NetworkGetEntityFromNetworkId(netId)
+    if not DoesEntityExist(vehicle) then
+        DeleteEntity(driver)
+        if config.logging.enabled then
+            logToConsole('AI Автобус', 'Не удалось получить entity автобуса из netId')
+        end
+        return
+    end
+    
+    -- Ждем небольшую синхронизацию и сажаем водителя в автобус
+    Wait(100)
+    SetPedIntoVehicle(driver, vehicle, -1) -- -1 = водительское место
+    
+    -- Настраиваем доступ к автобусу: разблокируем двери для пассажиров
+    SetVehicleDoorsLocked(vehicle, 1) -- 1 = unlocked, пассажиры могут входить
+    
+    -- Отправляем клиентам информацию о том, что это AI-автобус
+    -- Клиенты будут контролировать доступ к водительскому месту
+    TriggerClientEvent('qbx_busjob_new:client:registerAIBus', -1, busData.vehicleNetId, busData.driverNetId)
+    
+    -- Сохраняем данные
+    busData.vehicleNetId = NetworkGetNetworkIdFromEntity(vehicle)
+    busData.driverNetId = NetworkGetNetworkIdFromEntity(driver)
+    busData.state = 'spawned'
+    
+    -- Без пассажиров
+    busData.passengers = {}
+    
+    if config.logging.enabled then
+        logToConsole('AI Автобус', ('Создан AI-автобус %d на маршруте %d'):format(busData.id, busData.routeId))
+    end
+end
+
+-- Функция для удаления AI-автобуса
+local function despawnAIBus(busData)
+    if busData.state ~= 'spawned' then return end
+    
+    -- Удаляем пассажиров
+    for _, passengerNetId in ipairs(busData.passengers) do
+        local passenger = NetworkGetEntityFromNetworkId(passengerNetId)
+        if DoesEntityExist(passenger) then
+            DeleteEntity(passenger)
+        end
+    end
+    busData.passengers = {}
+    
+    -- Удаляем водителя
+    if busData.driverNetId then
+        local driver = NetworkGetEntityFromNetworkId(busData.driverNetId)
+        if DoesEntityExist(driver) then
+            DeleteEntity(driver)
+        end
+    end
+    
+    -- Удаляем автобус
+    if busData.vehicleNetId then
+        local vehicle = NetworkGetEntityFromNetworkId(busData.vehicleNetId)
+        if DoesEntityExist(vehicle) then
+            -- Сохраняем последнюю позицию
+            busData.virtualPosition = GetEntityCoords(vehicle)
+            -- Уведомляем клиентов об удалении AI-автобуса
+            TriggerClientEvent('qbx_busjob_new:client:unregisterAIBus', -1, busData.vehicleNetId)
+            DeleteEntity(vehicle)
+        end
+    end
+    
+    busData.vehicleNetId = nil
+    busData.driverNetId = nil
+    busData.state = 'virtual'
+    
+    if config.logging.enabled then
+        logToConsole('AI Автобус', ('Удален AI-автобус %d на маршруте %d'):format(busData.id, busData.routeId))
+    end
+end
+
+-- Функция для инициализации AI-автобусов на маршруте
+local function initializeAIBusesForRoute(routeId)
+    if not sharedConfig.aiBusinessSettings.enabled then return end
+    if getRouteBusCount(routeId) > 0 then return end -- Не создаем AI если есть игроки
+    
+    local route = sharedConfig.busRoutes[routeId]
+    if not route then return end
+    
+    aiBusinesses[routeId] = aiBusinesses[routeId] or { buses = {} }
+    
+    -- Создаем AI-автобусы с интервалом
+    for i = 1, sharedConfig.aiBusinessSettings.busesPerRoute do
+        SetTimeout((i - 1) * sharedConfig.aiBusinessSettings.timeBetweenBuses * 1000, function()
+            -- Проверяем еще раз что нет игроков на маршруте
+            if getRouteBusCount(routeId) == 0 then
+                aiBusIdCounter = aiBusIdCounter + 1
+                local busData = createAIBusData(routeId, aiBusIdCounter)
+                
+                -- Устанавливаем начальную позицию из busSpawnLocations
+                local spawnLocationIndex = ((i - 1) % #sharedConfig.busSpawnLocations) + 1
+                local spawnLocation = sharedConfig.busSpawnLocations[spawnLocationIndex]
+                busData.virtualPosition = vec3(spawnLocation.x, spawnLocation.y, spawnLocation.z)
+                busData.currentStopIndex = 0 -- Специальное значение: едет к первой точке маршрута
+                busData.status = 'Едет к началу маршрута'
+                
+                -- Рассчитываем начальный сдвиг по маршруту для каждого автобуса (после того как доедет до маршрута)
+                local totalStops = #route.stops
+                local stopsPerBus = math.floor(totalStops / sharedConfig.aiBusinessSettings.busesPerRoute)
+                local targetIndex = ((i - 1) * stopsPerBus) + 1
+                
+                if targetIndex <= totalStops then
+                    busData.targetStopIndex = targetIndex -- Цель после спавна
+                else
+                    busData.targetStopIndex = 1
+                end
+                
+                -- Рассчитываем время движения от спавна к первой точке маршрута
+                local targetStop = route.stops[busData.targetStopIndex]
+                if targetStop then
+                    local currentTime = GetGameTimer()
+                    local travelTime = calculateTravelTime(busData.virtualPosition, targetStop.coords, sharedConfig.aiBusinessSettings.averageSpeed)
+                    busData.nextStopTime = currentTime + travelTime
+                    busData.lastPositionUpdate = currentTime
+                end
+                
+                aiBusinesses[routeId].buses[busData.id] = busData
+                
+                if config.logging.enabled then
+                    logToConsole('AI Автобус', ('Инициализирован AI-автобус %d на маршруте %d'):format(busData.id, routeId))
+                end
+            end
+        end)
+    end
+end
+
+-- Функция для удаления всех AI-автобусов на маршруте
+local function removeAllAIBusesFromRoute(routeId)
+    if not aiBusinesses[routeId] then return end
+    
+    for busId, busData in pairs(aiBusinesses[routeId].buses) do
+        despawnAIBus(busData)
+    end
+    
+    aiBusinesses[routeId] = nil
+    
+    if config.logging.enabled then
+        logToConsole('AI Автобус', ('Удалены все AI-автобусы с маршрута %d'):format(routeId))
+    end
+end
+
+-- Поток управления AI-автобусами
+CreateThread(function()
+    if not sharedConfig.aiBusinessSettings.enabled then return end
+    
+    -- Инициализация AI-автобусов при старте
+    Wait(5000) -- Ждем загрузки ресурса
+    for _, route in ipairs(sharedConfig.busRoutes) do
+        if getRouteBusCount(route.id) == 0 then
+            initializeAIBusesForRoute(route.id)
+        end
+    end
+    
+    -- Основной цикл управления
+    while true do
+        Wait(sharedConfig.aiBusinessSettings.virtualSimulationInterval)
+        
+        local allPlayers = GetPlayers()
+        
+        for routeId, routeData in pairs(aiBusinesses) do
+            -- Проверяем не появились ли игроки на маршруте
+            if getRouteBusCount(routeId) > 0 then
+                removeAllAIBusesFromRoute(routeId)
+            else
+                -- Обновляем каждый AI-автобус
+                for busId, busData in pairs(routeData.buses) do
+                    if busData.state == 'virtual' then
+                        -- Симулируем движение
+                        simulateAIBusMovement(busData)
+                        
+                        -- Отправляем обновление блипа для виртуального автобуса
+                        TriggerClientEvent('qbx_busjob_new:client:updateAIBusBlip', -1, busData.id, busData.virtualPosition, busData.status or 'В пути')
+                        
+                        -- Проверяем proximity для спавна
+                        local shouldSpawn = false
+                        for _, playerId in ipairs(allPlayers) do
+                            local ped = GetPlayerPed(tonumber(playerId))
+                            if ped and DoesEntityExist(ped) then
+                                local playerPos = GetEntityCoords(ped)
+                                if busData.virtualPosition and #(playerPos - busData.virtualPosition) <= sharedConfig.aiBusinessSettings.proximitySpawnDistance then
+                                    shouldSpawn = true
+                                    break
+                                end
+                            end
+                        end
+                        
+                        if shouldSpawn then
+                            spawnAIBus(busData)
+                            
+                            -- Находим ближайшего игрока для управления AI
+                            local closestPlayer = nil
+                            local closestDistance = math.huge
+                            
+                            for _, playerId in ipairs(allPlayers) do
+                                local ped = GetPlayerPed(tonumber(playerId))
+                                if ped and DoesEntityExist(ped) then
+                                    local playerPos = GetEntityCoords(ped)
+                                    local distance = #(vector3(playerPos.x, playerPos.y, playerPos.z) - vector3(busData.virtualPosition.x, busData.virtualPosition.y, busData.virtualPosition.z))
+                                    if distance < closestDistance then
+                                        closestDistance = distance
+                                        closestPlayer = tonumber(playerId)
+                                    end
+                                end
+                            end
+                            
+                            -- Передаем управление ближайшему игроку
+                            if closestPlayer and busData.vehicleNetId then
+                                SetTimeout(1000, function() -- Небольшая задержка для синхронизации
+                                    TriggerClientEvent('qbx_busjob_new:client:controlAIBus', closestPlayer, {
+                                        vehicleNetId = busData.vehicleNetId,
+                                        driverNetId = busData.driverNetId,
+                                        routeId = busData.routeId,
+                                        currentStopIndex = busData.currentStopIndex,
+                                        busId = busData.id
+                                    })
+                                end)
+                            end
+                        end
+                    elseif busData.state == 'spawned' then
+                        -- Проверяем нужно ли деспавнить
+                        local shouldDespawn = true
+                        local vehicle = NetworkGetEntityFromNetworkId(busData.vehicleNetId)
+                        
+                        if DoesEntityExist(vehicle) then
+                            local busPos = GetEntityCoords(vehicle)
+                            
+                            for _, playerId in ipairs(allPlayers) do
+                                local ped = GetPlayerPed(tonumber(playerId))
+                                if ped and DoesEntityExist(ped) then
+                                    local playerPos = GetEntityCoords(ped)
+                                    if #(vector3(playerPos.x, playerPos.y, playerPos.z) - vector3(busPos.x, busPos.y, busPos.z)) <= sharedConfig.aiBusinessSettings.proximitySpawnDistance * 1.5 then
+                                        shouldDespawn = false
+                                        break
+                                    end
+                                end
+                            end
+                            
+                            if shouldDespawn then
+                                despawnAIBus(busData)
+                            else
+                                -- Проверяем, нужно ли передать управление другому игроку
+                                local currentOwner = NetworkGetEntityOwner(vehicle)
+                                if currentOwner > 0 then
+                                    local ownerPed = GetPlayerPed(currentOwner)
+                                    if DoesEntityExist(ownerPed) then
+                                        local ownerPos = GetEntityCoords(ownerPed)
+                                        local ownerDistance = #(vector3(ownerPos.x, ownerPos.y, ownerPos.z) - vector3(busPos.x, busPos.y, busPos.z))
+                                        
+                                        -- Если владелец далеко, найдем нового
+                                        if ownerDistance > sharedConfig.aiBusinessSettings.proximitySpawnDistance then
+                                            local newOwner = nil
+                                            local closestDistance = math.huge
+                                            
+                                            for _, playerId in ipairs(allPlayers) do
+                                                local pid = tonumber(playerId)
+                                                if pid ~= currentOwner then
+                                                    local ped = GetPlayerPed(pid)
+                                                    if ped and DoesEntityExist(ped) then
+                                                        local playerPos = GetEntityCoords(ped)
+                                                        local distance = #(vector3(playerPos.x, playerPos.y, playerPos.z) - vector3(busPos.x, busPos.y, busPos.z))
+                                                        if distance < closestDistance and distance < sharedConfig.aiBusinessSettings.proximitySpawnDistance then
+                                                            closestDistance = distance
+                                                            newOwner = pid
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                            
+                                            -- Передаем управление новому игроку
+                                            if newOwner then
+                                                TriggerClientEvent('qbx_busjob_new:client:controlAIBus', newOwner, {
+                                                    vehicleNetId = busData.vehicleNetId,
+                                                    driverNetId = busData.driverNetId,
+                                                    routeId = busData.routeId,
+                                                    currentStopIndex = busData.currentStopIndex,
+                                                    busId = busData.id
+                                                })
+                                            end
+                                        end
+                                    end
+                                end
+                                
+                                -- Отправляем обновление блипа для всех игроков
+                                TriggerClientEvent('qbx_busjob_new:client:updateAIBusBlip', -1, busData.id, busPos, busData.status or 'Работает')
+                            end
+                        else
+                            -- Автобус не существует - деспавним из данных
+                            despawnAIBus(busData)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- События для управления AI-автобусами при изменении состояния маршрутов
+local function onRoutePlayerCountChanged(routeId, playerCount)
+    if not sharedConfig.aiBusinessSettings.enabled then return end
+    
+    if playerCount > 0 then
+        -- Игроки появились на маршруте - удаляем AI
+        removeAllAIBusesFromRoute(routeId)
+    else
+        -- Игроки покинули маршрут - создаем AI
+        SetTimeout(5000, function() -- Небольшая задержка
+            if getRouteBusCount(routeId) == 0 then
+                initializeAIBusesForRoute(routeId)
+            end
+        end)
+    end
+end
+
+-- Модифицируем функции incrementRouteBusCount и decrementRouteBusCount для отслеживания изменений
+local originalIncrementRouteBusCount = incrementRouteBusCount
+incrementRouteBusCount = function(routeId)
+    local result = originalIncrementRouteBusCount(routeId)
+    if result then
+        onRoutePlayerCountChanged(routeId, getRouteBusCount(routeId))
+    end
+    return result
+end
+
+local originalDecrementRouteBusCount = decrementRouteBusCount
+decrementRouteBusCount = function(routeId)
+    local result = originalDecrementRouteBusCount(routeId)
+    if result then
+        onRoutePlayerCountChanged(routeId, getRouteBusCount(routeId))
+    end
+    return result
+end
+
+
+-- Событие для передачи управления AI-автобусом клиенту
+RegisterNetEvent('qbx_busjob_new:server:requestAIBusControl', function(routeId, busId)
+    local src = source
+    
+    if not aiBusinesses[routeId] or not aiBusinesses[routeId].buses[busId] then
+        return
+    end
+    
+    local busData = aiBusinesses[routeId].buses[busId]
+    
+    if busData.state == 'spawned' and busData.vehicleNetId then
+        -- Передаем данные клиенту для управления AI
+        TriggerClientEvent('qbx_busjob_new:client:controlAIBus', src, {
+            vehicleNetId = busData.vehicleNetId,
+            driverNetId = busData.driverNetId,
+            routeId = busData.routeId,
+            currentStopIndex = busData.currentStopIndex,
+            busId = busData.id
+        })
+    end
+end)
+
+-- Событие для обновления позиции AI-автобуса от клиента
+RegisterNetEvent('qbx_busjob_new:server:updateAIBusPosition', function(routeId, busId, stopIndex, position)
+    if not aiBusinesses[routeId] or not aiBusinesses[routeId].buses[busId] then
+        return
+    end
+    
+    local busData = aiBusinesses[routeId].buses[busId]
+    busData.currentStopIndex = stopIndex
+    busData.virtualPosition = position
+end)
+
+-- Callback для получения информации об AI-автобусах
+lib.callback.register('qbx_busjob_new:server:getAIBusesInfo', function(source)
+    local aiBusesInfo = {}
+    
+    for routeId, routeData in pairs(aiBusinesses) do
+        for busId, busData in pairs(routeData.buses) do
+            if busData.virtualPosition then
+                aiBusesInfo[#aiBusesInfo + 1] = {
+                    id = busData.id,
+                    routeId = busData.routeId,
+                    position = busData.virtualPosition,
+                    state = busData.state,
+                    currentStopIndex = busData.currentStopIndex
+                }
+            end
+        end
+    end
+    
+    return aiBusesInfo
+end)
+
+-- Админские команды для отладки AI-автобусов
+lib.addCommand('aibuses', {
+    help = 'Показать информацию об AI-автобусах',
+    restricted = 'group.admin'
+}, function(source)
+    print(string.format("^2[AI BUS] Информация об AI-автобусах для %s [%d]:^0", GetPlayerName(source), source))
+    
+    local totalAIBuses = 0
+    for routeId, routeData in pairs(aiBusinesses) do
+        local routeBusCount = 0
+        for busId, busData in pairs(routeData.buses) do
+            routeBusCount = routeBusCount + 1
+            print(string.format("^3AI Автобус %d - Маршрут %d, Состояние: %s, Точка: %d^0", 
+                busData.id, busData.routeId, busData.state, busData.currentStopIndex))
+        end
+        totalAIBuses = totalAIBuses + routeBusCount
+        print(string.format("^2Маршрут %d: %d AI-автобусов^0", routeId, routeBusCount))
+    end
+    
+    lib.notify(source, {
+        title = 'AI Автобусы',
+        description = string.format("Всего AI-автобусов: %d (см. консоль сервера)", totalAIBuses),
+        type = 'info'
+    })
+end)
+
+lib.addCommand('clearaibuses', {
+    help = 'Очистить все AI-автобусы',
+    restricted = 'group.admin'
+}, function(source)
+    local removedCount = 0
+    for routeId, routeData in pairs(aiBusinesses) do
+        for busId, busData in pairs(routeData.buses) do
+            despawnAIBus(busData)
+            removedCount = removedCount + 1
+        end
+    end
+    aiBusinesses = {}
+    
+    lib.notify(source, {
+        title = 'AI Автобусы',
+        description = string.format("Удалено %d AI-автобусов", removedCount),
+        type = 'success'
+    })
+    
+    if config.logging.enabled then
+        logToConsole('AI Автобус', ('Администратор %s очистил все AI-автобусы (%d)'):format(GetPlayerName(source), removedCount))
+    end
+end)
+
+lib.addCommand('reloadaibuses', {
+    help = 'Перезагрузить AI-автобусы на всех маршрутах',
+    restricted = 'group.admin'
+}, function(source)
+    -- Очищаем все AI-автобусы
+    for routeId, routeData in pairs(aiBusinesses) do
+        for busId, busData in pairs(routeData.buses) do
+            despawnAIBus(busData)
+        end
+    end
+    aiBusinesses = {}
+    
+    -- Перезапускаем AI на свободных маршрутах
+    SetTimeout(2000, function()
+        for _, route in ipairs(sharedConfig.busRoutes) do
+            if getRouteBusCount(route.id) == 0 then
+                initializeAIBusesForRoute(route.id)
+            end
+        end
+    end)
+    
+    lib.notify(source, {
+        title = 'AI Автобусы',
+        description = 'AI-автобусы перезагружены',
+        type = 'success'
+    })
+    
+    if config.logging.enabled then
+        logToConsole('AI Автобус', ('Администратор %s перезагрузил AI-автобусы'):format(GetPlayerName(source)))
+    end
+end)
+
+-- Очистка при перезапуске ресурса
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+
+    print('^3[BUS JOB] ^2Начинаем очистку ресурса...^0')
+
+    for routeId, routeData in pairs(aiBusinesses) do
+        for busId, busData in pairs(routeData.buses) do
+            despawnAIBus(busData)
+        end
+    end
+
+    -- Завершаем работу всем активным работникам
+    local cleanupCount = 0
+    for playerId, data in pairs(playerData) do
+        if data.working and data.busNetId then
+            local player = exports.qbx_core:GetPlayer(playerId)
+            local veh = NetworkGetEntityFromNetworkId(data.busNetId)
+
+            if DoesEntityExist(veh) then
+                -- Удаляем ключи если игрок онлайн
+                if player then
+                    exports.qbx_vehiclekeys:RemoveKeys(playerId, veh, true)
+                end
+
+                -- Уведомляем клиента о необходимости удалить автобус с его стороны
+                TriggerClientEvent('qbx_busjob_new:client:deleteVehicle', playerId, data.busNetId)
+
+                -- Удаляем автобус со стороны сервера
+                DeleteEntity(veh)
+                cleanupCount = cleanupCount + 1
+
+                print(string.format('^3[BUS JOB] ^2Удален автобус игрока %s (NetID: %d)^0',
+                    GetPlayerName(playerId) or 'Unknown', data.busNetId))
+            end
+            
+            -- Очищаем видимость автобуса
+            cleanupBusVisibility(data.busNetId)
+            
+            -- Очищаем пассажиров автобуса
+            clearAllServerPassengers(data.busNetId)
+
+            if player then
+                -- Возврат залога
+                if data.deposit > 0 then
+                    player.Functions.AddMoney('cash', data.deposit, 'bus-job-deposit-return-resource-stop')
+                    lib.notify(playerId, {
+                        title = 'Работа завершена',
+                        description = ('Залог возвращен: $%d'):format(data.deposit),
+                        type = 'info'
+                    })
+                else
+                    lib.notify(playerId, {
+                        title = 'Работа завершена',
+                        description = 'Работа завершена из-за перезапуска ресурса',
+                        type = 'info'
+                    })
+                end
+
+                -- Логирование
+                if config.logging.enabled then
+                    local workTime = os.time() - data.startTime
+                    logToConsole(
+                        'Завершение работы (остановка ресурса)',
+                        ('Игрок %s завершил работу. Заработано: $%d, Время: %d мин'):format(
+                            GetPlayerName(playerId),
+                            data.earnings,
+                            math.floor(workTime / 60)
+                        )
+                    )
+                end
+
+                -- Отправка события клиенту для очистки
+                TriggerClientEvent('qbx_busjob_new:client:endWork', playerId)
+            end
+            
+            -- Уменьшаем счетчик маршрута
+            if data.currentRoute then
+                decrementRouteBusCount(data.currentRoute.id)
+            end
+        end
+    end
+
+    -- Очищаем все данные
+    playerData = {}
+    routeBusCount = {}
+    busVisibility = {}
+    serverPassengers = {}
+    aiBusinesses = {}
+
+    print(string.format('^3[BUS JOB] ^1Ресурс остановлен. Удалено %d автобусов. Все активные работы завершены.^0',
+        cleanupCount))
+end)

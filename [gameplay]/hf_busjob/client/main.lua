@@ -43,6 +43,12 @@ local markerThread = nil -- Поток отрисовки маркера
 local busTextThread = nil -- Поток отрисовки текста на автобусах
 local activeBuses = {} -- Таблица активных автобусов других игроков {[vehicleEntity] = {routeId = 1, nextStopId = 1}}
 
+-- Переменные для AI-автобусов
+local aiBuses = {} -- Таблица AI-автобусов {[vehicleNetId] = driverNetId}
+local aiBusinesses = {} -- AI business статусы {[busId] = {position, status}}
+local aiBusBlips = {} -- Блипы AI-автобусов {[busId] = blip}
+local aiBusStatuses = {} -- Статусы AI-автобусов {[busId] = "status"}
+
 -- Функция для получения следующей остановки с ID
 local function getNextStopInfo(route, currentStopId)
     if not route or not route.stops then return nil end
@@ -1224,6 +1230,15 @@ CreateThread(function()
     while not QBX or not QBX.PlayerData do
         Wait(500)
     end
+    
+    -- Загружаем модель водителя AI-автобуса
+    if sharedConfig.aiBusinessSettings.enabled then
+        RequestModel(sharedConfig.aiBusinessSettings.driverModel)
+        while not HasModelLoaded(sharedConfig.aiBusinessSettings.driverModel) do
+            Wait(10)
+        end
+    end
+    
     createJobNPC()
     startBusTextThread() -- Запускаем отрисовку 3D текста при старте ресурса
     startBusCleanupThread() -- Запускаем очистку далеких автобусов
@@ -1254,5 +1269,450 @@ AddEventHandler('onResourceStop', function(resourceName)
     -- Если работаем - завершаем работу
     if isWorking then
         endWork()
+    end
+    
+    -- Очистка AI-автобусов
+    cleanupAllAIBuses()
+end)
+
+-- ===========================
+-- СИСТЕМА AI-АВТОБУСОВ
+-- ===========================
+
+local aiBusinesses = {} -- Локальное отслеживание AI-автобусов
+local controlledAIBuses = {} -- AI-автобусы под управлением этого клиента
+local aiBusBlips = {} -- Блипы AI-автобусов
+
+-- Функция для управления AI-автобусом
+local function driveAIBus(data)
+    local vehicle = NetworkGetEntityFromNetworkId(data.vehicleNetId)
+    local driver = NetworkGetEntityFromNetworkId(data.driverNetId)
+    
+    if not DoesEntityExist(vehicle) or not DoesEntityExist(driver) then
+        return
+    end
+    
+    local route = sharedConfig.busRoutes[data.routeId]
+    if not route then return end
+    
+    -- Запрашиваем контроль над сущностями
+    NetworkRequestControlOfNetworkId(data.vehicleNetId)
+    NetworkRequestControlOfNetworkId(data.driverNetId)
+    
+    -- Ждем получения контроля
+    local timeout = 0
+    while not NetworkHasControlOfNetworkId(data.vehicleNetId) or not NetworkHasControlOfNetworkId(data.driverNetId) do
+        Wait(100)
+        timeout = timeout + 1
+        if timeout > 50 then -- 5 секунд
+            return
+        end
+    end
+    
+    -- Загружаем коллизии
+    SetEntityLoadCollisionFlag(vehicle, true, 1)
+    SetEntityLoadCollisionFlag(driver, true, 1)
+    while not HasCollisionLoadedAroundEntity(vehicle) or not HasCollisionLoadedAroundEntity(driver) do
+        Wait(0)
+    end
+    
+    -- Настройка неуязвимости автобуса и водителя
+    SetEntityInvincible(vehicle, true)
+    SetEntityInvincible(driver, true)
+    SetEntityCanBeDamaged(vehicle, false)
+    SetEntityCanBeDamaged(driver, false)
+    SetVehicleEngineOn(vehicle, true, true, false)
+    SetPedCanBeTargetted(driver, false)
+    SetDriverAbility(driver, 1.0)
+    SetDriverAggressiveness(driver, 0.0)
+    SetBlockingOfNonTemporaryEvents(driver, true)
+    
+    -- Добавляем проверку на застревание
+    if not DoesVehicleHaveStuckVehicleCheck(vehicle) then
+        AddVehicleStuckCheckWithWarp(vehicle, 10.0, 1000, false, false, false, -1)
+    end
+    
+    -- Сохраняем данные для отслеживания
+    controlledAIBuses[data.busId] = {
+        vehicle = vehicle,
+        driver = driver,
+        routeId = data.routeId,
+        currentStopIndex = data.currentStopIndex,
+        busId = data.busId,
+        isActive = true
+    }
+    
+    -- Основной цикл вождения
+    CreateThread(function()
+        local busData = controlledAIBuses[data.busId]
+        
+        while busData and busData.isActive and DoesEntityExist(vehicle) and DoesEntityExist(driver) do
+            local currentStop = route.stops[busData.currentStopIndex]
+            if not currentStop then break end
+            
+            -- Устанавливаем задачу движения к следующей точке
+            ClearPedTasks(driver) -- Очищаем старые задачи
+            SetVehicleOnGroundProperly(vehicle) -- Убеждаемся что автобус на земле
+            TaskVehicleDriveToCoordLongrange(
+                driver,
+                vehicle,
+                currentStop.coords.x,
+                currentStop.coords.y,
+                currentStop.coords.z,
+                sharedConfig.aiBusinessSettings.averageSpeed * 3.6, -- Конвертируем м/с в км/ч
+                sharedConfig.aiBusinessSettings.driveStyle,
+                10.0
+            )
+            
+            -- Ждем пока автобус движется
+            local stuckTimer = 0
+            local lastPos = GetEntityCoords(vehicle)
+            
+            while DoesEntityExist(vehicle) and busData.isActive do
+                local currentPos = GetEntityCoords(vehicle)
+                local distanceToStop = #(currentPos - currentStop.coords)
+                
+                -- Проверяем достигли ли остановки
+                if distanceToStop < 15.0 then
+                    -- Если это остановка с ожиданием
+                    if currentStop.waitTime and currentStop.waitTime > 0 then
+                        -- Останавливаем автобус
+                        TaskVehicleTempAction(driver, vehicle, 27, 1000)
+                        Wait(currentStop.waitTime)
+                    end
+                    
+                    -- Переходим к следующей точке
+                    busData.currentStopIndex = busData.currentStopIndex + 1
+                    if busData.currentStopIndex > #route.stops then
+                        busData.currentStopIndex = 1
+                    end
+                    
+                    -- Обновляем позицию на сервере
+                    TriggerServerEvent('qbx_busjob_new:server:updateAIBusPosition', 
+                        busData.routeId, 
+                        busData.busId, 
+                        busData.currentStopIndex,
+                        currentPos
+                    )
+                    
+                    break
+                end
+                
+                -- Проверка на застревание (как в publictransport)
+                if IsVehicleStuckTimerUp(vehicle, 0, 4000) or IsVehicleStuckTimerUp(vehicle, 1, 4000) or 
+                   IsVehicleStuckTimerUp(vehicle, 2, 4000) or IsVehicleStuckTimerUp(vehicle, 3, 4000) then
+                    -- Телепортируем на ближайшую дорогу
+                    SetEntityCollision(vehicle, false, true)
+                    local vehPos = GetEntityCoords(vehicle)
+                    local ret, outPos = GetPointOnRoadSide(vehPos.x, vehPos.y, vehPos.z, -1)
+                    if ret then
+                        local ret2, pos, heading = GetClosestVehicleNodeWithHeading(outPos.x, outPos.y, outPos.z, 1, 3.0, 0)
+                        if ret2 then
+                            SetEntityCoords(vehicle, pos)
+                            SetEntityHeading(vehicle, heading)
+                            SetEntityCollision(vehicle, true, true)
+                            SetVehicleOnGroundProperly(vehicle)
+                        end
+                    end
+                end
+                
+                Wait(100)
+            end
+        end
+        
+        -- Очищаем данные когда автобус больше не под контролем
+        if controlledAIBuses[data.busId] then
+            controlledAIBuses[data.busId] = nil
+        end
+    end)
+end
+
+-- Хранилище статусов AI-автобусов
+local aiBusStatuses = {}
+
+-- Обновление блипа AI-автобуса
+RegisterNetEvent('qbx_busjob_new:client:updateAIBusBlip')
+AddEventHandler('qbx_busjob_new:client:updateAIBusBlip', function(busId, position, status)
+    if not position then return end
+    
+    -- Сохраняем статус
+    if status then
+        aiBusStatuses[busId] = status
+    end
+    
+    local blip = aiBusBlips[busId]
+    if blip and DoesBlipExist(blip) then
+        SetBlipCoords(blip, position.x, position.y, position.z)
+    else
+        -- Создаем новый блип если его нет
+        blip = AddBlipForCoord(position.x, position.y, position.z)
+        SetBlipSprite(blip, sharedConfig.aiBusinessSettings.blipSprite)
+        SetBlipColour(blip, sharedConfig.aiBusinessSettings.blipColor)
+        SetBlipScale(blip, sharedConfig.aiBusinessSettings.blipScale)
+        SetBlipAlpha(blip, sharedConfig.aiBusinessSettings.blipAlpha)
+        SetBlipAsShortRange(blip, true)
+        
+        BeginTextCommandSetBlipName('STRING')
+        AddTextComponentSubstringPlayerName('AI Автобус')
+        EndTextCommandSetBlipName(blip)
+        
+        aiBusBlips[busId] = blip
+    end
+end)
+
+-- Поток для отображения 3D текста над AI-автобусами
+CreateThread(function()
+    while true do
+        local playerPed = cache.ped
+        -- Запрещаем автоматическое пересаживание на место водителя
+        if not IsPedInAnyVehicle(playerPed, false) or GetPedInVehicleSeat(GetVehiclePedIsIn(playerPed, false), -1) ~= playerPed then
+            SetPedConfigFlag(playerPed, 184, true) -- DISABLE_SHUFFLE_TO_DRIVER_SEAT
+        end
+        local playerCoords = GetEntityCoords(playerPed)
+        local showText = false
+        local currentVehicle = GetVehiclePedIsIn(playerPed, false)
+        
+        -- Проверяем все AI-автобусы в радиусе видимости
+        for busId, blip in pairs(aiBusBlips) do
+            if DoesBlipExist(blip) then
+                local busCoords = GetBlipCoords(blip)
+                local distance = #(playerCoords - busCoords)
+                
+                if distance <= 75.0 then -- В радиусе 50 метров показываем 3D текст
+                    showText = true
+                    
+                    -- Ищем реальный автобус по координатам
+                    local vehicle = lib.getClosestVehicle(busCoords)
+                    if DoesEntityExist(vehicle) then
+                        local actualCoords = GetEntityCoords(vehicle)
+                        local textCoords = actualCoords + vector3(0.0, 0.0, 3.5)
+                        
+                        -- Отображаем название маршрута
+                        qbx.drawText3d({
+                            coords = textCoords,
+                            text = 'Кольцевой маршрут штата',
+                            scale = 0.5,
+                            color = { r = 0, g = 255, b = 255, a = 200 }
+                        })
+                        
+                        -- Отображаем статус автобуса
+                        local status = aiBusStatuses[busId] or 'Работает'
+                        local stopTextCoords = actualCoords + vector3(0.0, 0.0, 3.0)
+                        qbx.drawText3d({
+                            coords = stopTextCoords,
+                            text = 'AI Автобус - ' .. status,
+                            scale = 0.4,
+                            color = { r = 255, g = 255, b = 255, a = 180 }
+                        })
+                        
+                        -- Отображаем подсказку для входа
+                        local hintTextCoords = actualCoords + vector3(0.0, 0.0, 2.5)
+                        qbx.drawText3d({
+                            coords = hintTextCoords,
+                            text = 'Нажмите F для входа',
+                            scale = 0.3,
+                            color = { r = 200, g = 200, b = 200, a = 150 }
+                        })
+                        
+                        -- Проверяем возможность входа в AI-автобус
+                        local vehicleDistance = #(playerCoords - actualCoords)
+                        if vehicleDistance <= 5.0 and currentVehicle == 0 and not isWorking then
+                            if IsControlJustPressed(0, 23) then -- F key
+                                -- Сажаем игрока в AI-автобус только на пассажирские места (0, 1, 2, 3...)
+                                -- Водительское место (-1) заблокировано для игроков
+                                local freeSeat = -1
+                                for seat = 0, GetVehicleMaxNumberOfPassengers(vehicle) do
+                                    if IsVehicleSeatFree(vehicle, seat) then
+                                        freeSeat = seat
+                                        break
+                                    end
+                                end
+                                
+                                if freeSeat ~= -1 then
+                                    TaskEnterVehicle(playerPed, vehicle, 10000, freeSeat, 1.0, 1, 0)
+                                else
+                                    exports.qbx_core:Notify('Автобус переполнен', 'error')
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Если текст показывается, обновляем чаще, иначе реже
+        Wait(showText and 0 or 1000)
+    end
+end)
+
+
+-- Событие для начала управления AI-автобусом
+RegisterNetEvent('qbx_busjob_new:client:controlAIBus', function(data)
+    driveAIBus(data)
+end)
+
+-- Функция для создания блипов AI-автобусов
+local function updateAIBusBlips()
+    if not sharedConfig.aiBusinessSettings.showOnMap then return end
+    
+    -- Получаем информацию об AI-автобусах с сервера
+    lib.callback('qbx_busjob_new:server:getAIBusesInfo', false, function(aiBusesInfo)
+        if not aiBusesInfo then return end
+        
+        -- Обновляем существующие блипы или создаем новые
+        for _, busInfo in ipairs(aiBusesInfo) do
+            if busInfo.position then
+                local blip = aiBusBlips[busInfo.id]
+                
+                if blip and DoesBlipExist(blip) then
+                    -- Обновляем позицию существующего блипа
+                    SetBlipCoords(blip, busInfo.position.x, busInfo.position.y, busInfo.position.z)
+                else
+                    -- Создаем новый блип
+                    blip = AddBlipForCoord(busInfo.position.x, busInfo.position.y, busInfo.position.z)
+                    SetBlipSprite(blip, sharedConfig.aiBusinessSettings.blipSprite)
+                    SetBlipColour(blip, sharedConfig.aiBusinessSettings.blipColor)
+                    SetBlipScale(blip, sharedConfig.aiBusinessSettings.blipScale)
+                    SetBlipAlpha(blip, sharedConfig.aiBusinessSettings.blipAlpha)
+                    SetBlipAsShortRange(blip, true)
+                    
+                    BeginTextCommandSetBlipName('STRING')
+                    AddTextComponentSubstringPlayerName('AI Автобус')
+                    EndTextCommandSetBlipName(blip)
+                    
+                    aiBusBlips[busInfo.id] = blip
+                end
+            end
+        end
+        
+        -- Удаляем блипы для автобусов, которых больше нет
+        for busId, blip in pairs(aiBusBlips) do
+            local found = false
+            for _, busInfo in ipairs(aiBusesInfo) do
+                if busInfo.id == busId then
+                    found = true
+                    break
+                end
+            end
+            
+            if not found and DoesBlipExist(blip) then
+                RemoveBlip(blip)
+                aiBusBlips[busId] = nil
+            end
+        end
+    end)
+end
+
+-- Поток для обновления блипов AI-автобусов
+CreateThread(function()
+    while true do
+        if sharedConfig.aiBusinessSettings.enabled and sharedConfig.aiBusinessSettings.showOnMap then
+            updateAIBusBlips()
+        end
+        Wait(2000) -- Обновляем каждые 2 секунды для более плавного движения блипов
+    end
+end)
+
+-- Функция очистки всех AI-автобусов
+function cleanupAllAIBuses()
+    -- Очищаем контролируемые автобусы
+    for busId, busData in pairs(controlledAIBuses) do
+        busData.isActive = false
+    end
+    controlledAIBuses = {}
+    
+    -- Очищаем блипы
+    for busId, blip in pairs(aiBusBlips) do
+        if DoesBlipExist(blip) then
+            RemoveBlip(blip)
+        end
+    end
+    aiBusBlips = {}
+end
+
+-- ===========================
+-- СОБЫТИЯ AI-АВТОБУСОВ
+-- ===========================
+
+-- Регистрация AI-автобуса для контроля доступа к водительскому месту
+RegisterNetEvent('qbx_busjob_new:client:registerAIBus')
+AddEventHandler('qbx_busjob_new:client:registerAIBus', function(vehicleNetId, driverNetId)
+    if not vehicleNetId then return end
+    aiBuses[vehicleNetId] = driverNetId
+end)
+
+-- Отмена регистрации AI-автобуса
+RegisterNetEvent('qbx_busjob_new:client:unregisterAIBus')
+AddEventHandler('qbx_busjob_new:client:unregisterAIBus', function(vehicleNetId)
+    if not vehicleNetId then return end
+    aiBuses[vehicleNetId] = nil
+end)
+
+-- Поток для проверки попыток игроков сесть в AI-автобусы
+CreateThread(function()
+    while true do
+        Wait(100) -- Проверяем каждые 100ms
+        
+        local playerPed = PlayerPedId()
+        local vehicle = GetVehiclePedIsTryingToEnter(playerPed)
+        
+        if vehicle and vehicle ~= 0 then
+            local vehicleNetId = NetworkGetNetworkIdFromEntity(vehicle)
+            
+            -- Проверяем, является ли это AI-автобусом
+            if aiBuses[vehicleNetId] then
+                local seatIndex = GetSeatPedIsTryingToEnter(playerPed)
+                
+                -- Если игрок пытается сесть на водительское место (-1)
+                if seatIndex == -1 then
+                    -- Отменяем попытку входа
+                    ClearPedTasks(playerPed)
+                    
+                    -- Показываем уведомление
+                    lib.notify({
+                        title = 'Ограничение доступа',
+                        description = 'Вы не можете сесть на водительское место AI-автобуса! Используйте пассажирские места.',
+                        type = 'error'
+                    })
+                    
+                    -- Добавляем небольшую задержку, чтобы предотвратить спам
+                    Wait(1000)
+                end
+            end
+        end
+    end
+end)
+
+-- Дополнительная проверка для игроков уже находящихся в автобусе
+CreateThread(function()
+    while true do
+        Wait(500) -- Проверяем каждые 500ms
+        
+        local playerPed = PlayerPedId()
+        local vehicle = GetVehiclePedIsIn(playerPed, false)
+        
+        if vehicle and vehicle ~= 0 then
+            local vehicleNetId = NetworkGetNetworkIdFromEntity(vehicle)
+            
+            -- Проверяем, является ли это AI-автобусом
+            if aiBuses[vehicleNetId] then
+                local seatIndex = GetPedVehicleSeat(playerPed)
+                
+                -- Если игрок каким-то образом оказался на водительском месте
+                if seatIndex == -1 then
+                    -- Выкидываем игрока из автобуса
+                    TaskLeaveVehicle(playerPed, vehicle, 0)
+                    
+                    Wait(1000) -- Ждем выхода
+                    
+                    -- Показываем уведомление
+                    lib.notify({
+                        title = 'Нарушение правил',
+                        description = 'Вы были исключены из AI-автобуса за попытку занять водительское место!',
+                        type = 'error'
+                    })
+                end
+            end
+        end
     end
 end)

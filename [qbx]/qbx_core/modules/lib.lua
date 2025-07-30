@@ -379,7 +379,83 @@ if isServer then
         --- prevent server from deleting a vehicle without an owner
         SetEntityOrphanMode(veh, 2)
         exports.qbx_core:EnablePersistence(veh)
+
+        -- ================================
+        -- Регистрация созданного ТС за вызывающим ресурсом
+        -- ================================
+        if not qbx._resourceSpawnedVehicles then
+            qbx._resourceSpawnedVehicles = {}
+        end
+
+        -- Попытка определить ресурс-инициатор (можно переопределить через params.creatorResource)
+        local creatorRes = params.creatorResource
+
+        if not creatorRes then
+            local info = debug.getinfo(3, 'S') or {}
+            if info.source then
+                local srcPath = info.source:gsub('^@', '') -- убираем начальный символ '@'
+
+                -- Выделяем части пути ресурса (пример: [gameplay]/hf_busjob/server/main.lua)
+                local first, second = srcPath:match('([^/]+)/([^/]+)/')
+
+                if first and first:sub(1, 1) == '[' then
+                    -- Путь имеет групповую папку: [folder]/resource
+                    creatorRes = second
+                else
+                    creatorRes = first
+                end
+            end
+        end
+
+        if creatorRes then
+            if not qbx._resourceSpawnedVehicles[creatorRes] then
+                qbx._resourceSpawnedVehicles[creatorRes] = {}
+            end
+
+            table.insert(qbx._resourceSpawnedVehicles[creatorRes], veh)
+
+            -- Сохраняем в statebag для дополнительного дебага
+            Entity(veh).state:set('spawnedByResource', creatorRes, true)
+
+            -- Отладочный вывод
+            -- if GetConvar('qbx_debug_resource_vehicles', 'false') == 'true' then
+                print(('^3[qbx.debug]^0 Vehicle spawned by resource ^2%s^0: model=%s, ent=%d'):format(creatorRes, tostring(model), veh))
+            -- end
+        end
+
         return netId, veh
+    end
+
+    -- =============================================================
+    -- Глобальный обработчик остановки ресурсов – очищаем их ТС
+    -- =============================================================
+    if not qbx._resourceCleanupHandler then
+        AddEventHandler('onResourceStop', function(resourceName)
+            print('qbx onResourceStop', resourceName)
+            local list = qbx._resourceSpawnedVehicles and qbx._resourceSpawnedVehicles[resourceName]
+            if not list then return end
+
+            for i = 1, #list do
+                local vehicle = list[i]
+                if DoesEntityExist(vehicle) then
+                    -- Убираем признак персистентности, чтобы ТС не восстанавливалось
+                    Entity(vehicle).state:set('persisted', nil, true)
+                    DeleteEntity(vehicle)
+
+                    -- if GetConvar('qbx_debug_resource_vehicles', 'false') == 'true' then
+                        print(('^3[qbx.debug]^0 Cleaned vehicle %d for resource ^2%s^0'):format(vehicle, resourceName))
+                    -- end
+                end
+            end
+
+            -- if GetConvar('qbx_debug_resource_vehicles', 'false') == 'true' then
+                print(('^3[qbx.debug]^0 Resource ^2%s^0 stopped, removed %d vehicles'):format(resourceName, #list))
+            -- end
+
+            qbx._resourceSpawnedVehicles[resourceName] = nil
+        end)
+
+        qbx._resourceCleanupHandler = true
     end
 else
     ---@class LibDrawTextParams

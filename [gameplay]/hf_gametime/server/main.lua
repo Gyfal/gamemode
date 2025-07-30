@@ -85,7 +85,7 @@ local function updateWeather()
         TriggerClientEvent(config.events.onWeatherChange, -1, weatherState.current, weatherState.next)
         
         if config.debug then
-            print(string.format("^4[GameTime] Смена погоды: %s -> %s^0", weatherState.current, weatherState.next))
+            -- print(string.format("^4[GameTime] Смена погоды: %s -> %s^0", weatherState.current, weatherState.next))
         end
     end
 end

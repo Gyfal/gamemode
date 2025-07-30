@@ -271,5 +271,26 @@ return {
         showNotifications = true, -- Показывать уведомления
         requireDeposit = true, -- Требовать залог за автобус
         maxBusesPerRoute = 5 -- Максимальное количество автобусов на одном маршруте
+    },
+
+    -- Настройки AI-автобусов
+    aiBusinessSettings = {
+        enabled = true, -- Включить AI-автобусы
+        busesPerRoute = 3, -- Количество AI-автобусов на маршруте
+        timeBetweenBuses = 180, -- Время между AI-автобусами в секундах
+        driveStyle = 786601, -- Стиль вождения AI (786603 = агрессивный, игнорирует трафик и препятствия)
+        averageSpeed = 15.0, -- Средняя скорость AI-автобусов в м/с (~54 км/ч)
+        proximitySpawnDistance = 300.0, -- Расстояние спавна AI-автобуса от игрока
+        virtualSimulationInterval = 1000, -- Интервал обновления виртуальной позиции (мс)
+        showOnMap = true, -- Показывать AI-автобусы на карте
+        blipSprite = 463, -- Спрайт блипа для AI-автобусов (автобус)
+        blipColor = 3, -- Цвет блипа (3 = голубой)
+        blipScale = 0.6, -- Размер блипа
+        blipAlpha = 150, -- Прозрачность блипа (0-255)
+        driverModel = `s_m_m_gentransport`, -- Модель водителя AI-автобуса
+        canHavePassengers = true, -- Могут ли AI-автобусы иметь пассажиров
+        passengerChance = 70, -- Шанс наличия пассажиров в AI-автобусе (%)
+        minPassengers = 5, -- Минимум пассажиров в AI-автобусе
+        maxPassengers = 15 -- Максимум пассажиров в AI-автобусе
     }
 }

@@ -30,6 +30,7 @@
     "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\runtime",
     "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\natives\\CFX-NATIVE",
     "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\natives\\GTAV",
-    "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\natives\\GTAV"
+    "~\\AppData\\Roaming\\Code\\User\\globalStorage\\communityox.cfxlua-vscode-cox\\library\\natives\\GTAV",
+        "${addons}/fivem/module/library"
   ]
 }

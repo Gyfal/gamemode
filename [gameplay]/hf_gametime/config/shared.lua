@@ -1,6 +1,6 @@
 return {
     -- Базовые настройки
-    debug = true,
+    debug = false,
     
     -- Настройки времени
     timeSettings = {

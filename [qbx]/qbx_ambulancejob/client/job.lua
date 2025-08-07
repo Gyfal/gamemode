@@ -2,7 +2,7 @@ local config = require 'config.client'
 local sharedConfig = require 'config.shared'
 local WEAPONS = exports.qbx_core:GetWeapons()
 
----Configures and spawns a vehicle and teleports player to the driver seat.
+---Настраивает и спавнит транспортное средство, а затем телепортирует игрока на место водителя.
 ---@param data { vehicleName: string, coords: vector4}
 local function takeOutVehicle(data)
     local netId = lib.callback.await('qbx_ambulancejob:server:spawnVehicle', false, data.vehicleName, data.coords)

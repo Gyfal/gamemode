@@ -269,11 +269,12 @@ local isLoggedIn = false
 local function playerEnterVehLoop()
     CreateThread(function()
         while isLoggedIn do
+            Wait(100)
             local vehicle = GetVehiclePedIsTryingToEnter(cache.ped)
             if vehicle ~= 0 then
                 onVehicleAttemptToEnter(vehicle)
             end
-            Wait(100)
+
         end
     end)
 end

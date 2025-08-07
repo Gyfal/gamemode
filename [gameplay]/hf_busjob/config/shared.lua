@@ -1,7 +1,7 @@
 return {
     -- Локация NPC для устройства на работу
     jobNPC = {
-        model = "s_m_m_cntrybar_01", -- Модель NPC
+        model = "s_m_m_cntrybar_01",                  -- Модель NPC
         coords = vec4(1716.0, 3325.22, 41.22, 195.0), -- Координаты NPC (x, y, z, heading)
         blip = {
             enabled = true,
@@ -27,7 +27,7 @@ return {
             name = 'Кольцевой маршрут штата',
             description = 'Кольцевой маршрут по всему штату с 23 остановками',
             headingTolerance = 45.0, -- Допустимая погрешность heading в градусах
-            stops = 
+            stops =
             {
                 { coords = vec3(1802.80, 3315.66, 42.97), heading = 210.79, payment = 0 },
                 { coords = vec3(1825.40, 3275.24, 44.56), heading = 212.80, payment = 150, waitTime = 10000, stopName = "Sandy Shores Airfield" },
@@ -202,6 +202,21 @@ return {
                 { coords = vec3(1684.92, 3526.13, 36.86), heading = 208.33, payment = 0 },
                 { coords = vec3(1744.59, 3419.65, 38.77), heading = 208.49, payment = 0 }
             }
+        },
+        {
+            id = 2,
+            name = 'Кольцевой маршрут штата 2',
+            description = 'Кольцевой маршрут по всему штату с 4 остановками',
+            headingTolerance = 45.0, -- Допустимая погрешность heading в градусах
+            stops =
+            {
+                { coords = vec3(1802.80, 3315.66, 42.97), heading = 210.79, payment = 0 },
+                { coords = vec3(1825.40, 3275.24, 44.56), heading = 212.80, payment = 150, waitTime = 10000, stopName = "Sandy Shores Airfield" },
+
+                { coords = vec3(1684.92, 3526.13, 36.86), heading = 208.33, payment = 0,   waitTime = 10000, stopName = "Test 2" },
+
+                { coords = vec3(1744.59, 3419.65, 38.77), heading = 208.49, payment = 0 }
+            }
         }
     },
 
@@ -216,7 +231,12 @@ return {
             model = `airbus`,
             label = 'Аэропортовский автобус',
             deposit = 0
-        }
+        },
+        {
+            model = `infernus`,
+            label = 'INFERNUS',
+            deposit = 0 -- Залог за автобус
+        },
     },
 
     -- Модели пассажиров NPC
@@ -249,48 +269,72 @@ return {
 
     -- Настройки пассажиров
     passengerSettings = {
-        maxPassengersPerStop = 3, -- Максимум пассажиров на остановке
-        minPassengersPerStop = 1, -- Минимум пассажиров на остановке
+        maxPassengersPerStop = 3,  -- Максимум пассажиров на остановке
+        minPassengersPerStop = 1,  -- Минимум пассажиров на остановке
         passengerSpawnChance = 30, -- Шанс появления пассажиров на остановке (%)
         passengerPayment = {
-            min = 50, -- Минимальная оплата за пассажира
-            max = 100 -- Максимальная оплата за пассажира
+            min = 50,              -- Минимальная оплата за пассажира
+            max = 100              -- Максимальная оплата за пассажира
         },
-        waitTime = 3000, -- Время ожидания посадки/высадки (мс)
-        exitChance = 30, -- Шанс выхода пассажира на каждой остановке (%)
-        spawnDistance = 10.0, -- Расстояние спавна пассажиров от остановки
-        animationTime = 2000 -- Время анимации посадки/высадки
+        waitTime = 3000,           -- Время ожидания посадки/высадки (мс)
+        exitChance = 30,           -- Шанс выхода пассажира на каждой остановке (%)
+        spawnDistance = 10.0,      -- Расстояние спавна пассажиров от остановки
+        animationTime = 2000       -- Время анимации посадки/высадки
     },
 
     -- Настройки
     settings = {
-        stopRadius = 7.0, -- Радиус остановки
+        stopRadius = 7.0,         -- Радиус остановки
         routeCompleteBonus = 500, -- Бонус за полный круг
-        showBlips = true, -- Показывать блипы остановок
-        showMarkers = true, -- Показывать маркеры остановок
+        showBlips = true,         -- Показывать блипы остановок
+        showMarkers = true,       -- Показывать маркеры остановок
         showNotifications = true, -- Показывать уведомления
-        requireDeposit = true, -- Требовать залог за автобус
-        maxBusesPerRoute = 5 -- Максимальное количество автобусов на одном маршруте
+        requireDeposit = true,    -- Требовать залог за автобус
+        maxBusesPerRoute = 2      -- Максимальное количество автобусов на одном маршруте
     },
 
     -- Настройки AI-автобусов
     aiBusinessSettings = {
-        enabled = true, -- Включить AI-автобусы
-        busesPerRoute = 3, -- Количество AI-автобусов на маршруте
-        timeBetweenBuses = 180, -- Время между AI-автобусами в секундах
-        driveStyle = 786601, -- Стиль вождения AI (786603 = агрессивный, игнорирует трафик и препятствия)
-        averageSpeed = 15.0, -- Средняя скорость AI-автобусов в м/с (~54 км/ч)
-        proximitySpawnDistance = 300.0, -- Расстояние спавна AI-автобуса от игрока
-        virtualSimulationInterval = 1000, -- Интервал обновления виртуальной позиции (мс)
-        showOnMap = true, -- Показывать AI-автобусы на карте
-        blipSprite = 463, -- Спрайт блипа для AI-автобусов (автобус)
-        blipColor = 3, -- Цвет блипа (3 = голубой)
-        blipScale = 0.6, -- Размер блипа
-        blipAlpha = 150, -- Прозрачность блипа (0-255)
+        enabled = true,                     -- Включить AI-автобусы
+        enableDisplay = true,               -- Включить отображение AI автобусов (блипы и 3D текст)
+        busesPerRoute = 2,                  -- Количество AI-автобусов на маршруте
+        timeBetweenBuses = 180,             -- Время между AI-автобусами в секундах
+        driveStyle = 786731,                -- Стиль вождения AI (786603 = агрессивный, игнорирует трафик и препятствия)
+        averageSpeed = 15.0,                -- Средняя скорость AI-автобусов в м/с (~54 км/ч)
+        proximitySpawnDistance = 300.0,     -- Расстояние спавна AI-автобуса от игрока
+        virtualSimulationInterval = 1000,   -- Интервал обновления виртуальной позиции (мс)
+        showOnMap = true,                   -- Показывать AI-автобусы на карте
+        blipSprite = 513,                   -- Спрайт блипа для AI-автобусов (автобус)
+        blipColor = 3,                      -- Цвет блипа (3 = голубой)
+        blipScale = 0.6,                    -- Размер блипа
+        blipAlpha = 150,                    -- Прозрачность блипа (0-255)
         driverModel = `s_m_m_gentransport`, -- Модель водителя AI-автобуса
-        canHavePassengers = true, -- Могут ли AI-автобусы иметь пассажиров
-        passengerChance = 70, -- Шанс наличия пассажиров в AI-автобусе (%)
-        minPassengers = 5, -- Минимум пассажиров в AI-автобусе
-        maxPassengers = 15 -- Максимум пассажиров в AI-автобусе
+        canHavePassengers = true,           -- Могут ли AI-автобусы иметь пассажиров
+        passengerChance = 70,               -- Шанс наличия пассажиров в AI-автобусе (%)
+        minPassengers = 5,                  -- Минимум пассажиров в AI-автобусе
+        maxPassengers = 15,                 -- Максимум пассажиров в AI-автобусе
+
+        -- Настройки отображения информации об остановках
+        showStopInfo = true,                      -- Показывать информацию об остановках
+        stopInfoDistance = 100.0,                 -- Расстояние отображения 3D текста (метры)
+        blipUpdateInterval = 2000,                -- Интервал обновления блипов (мс)
+        maxVisibleAIBuses = 10,                   -- Максимум видимых AI автобусов
+        stopInfoTextScale = 0.4,                  -- Размер текста информации об остановке
+        stopInfoTextColor = { 0, 255, 255, 255 }, -- Цвет текста (голубой RGBA)
+
+        -- Дополнительные настройки для отображения AI автобусов
+        displaySettings = {
+            enableBlips = true,          -- Включить блипы AI автобусов на карте
+            enable3DText = true,         -- Включить 3D текст над AI автобусами
+            enableStopNames = true,      -- Показывать названия остановок
+            blipUpdateThreshold = 1000,  -- Минимальный интервал обновления блипов (мс)
+            textUpdateDistance = 100.0,  -- Расстояние обновления 3D текста
+            maxBlipsOnMap = 15,          -- Максимальное количество блипов AI автобусов на карте
+            distanceBasedUpdates = true, -- Обновлять только ближайшие автобусы
+            cacheUpdateInterval = 5000,  -- Интервал очистки кэша (мс)
+            virtualBusAlpha = 100,       -- Прозрачность блипов виртуальных автобусов
+            spawnedBusAlpha = 200,       -- Прозрачность блипов заспавненных автобусов
+            debugMode = false            -- Режим отладки для AI автобусов
+        }
     }
 }

@@ -160,6 +160,7 @@ lib.addCommand('car', {
 
     local plate = qbx.getVehiclePlate(vehicle)
     config.giveVehicleKeys(source, plate, vehicle)
+    exports.qbx_vehiclekeys:SetLockState(vehicle, 'unlock')
 end)
 
 lib.addCommand('dv', {

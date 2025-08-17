@@ -1,54 +1,41 @@
 return {
-    -- Настройки работы
     job = {
-        name = 'bus', -- Название работы в базе данных
-        label = 'Водитель автобуса', -- Отображаемое название
-        minGrade = 0, -- Минимальный ранг для работы
+        name = 'bus',
+        label = 'Водитель автобуса',
+        minGrade = 0,
     },
 
-    -- Настройки оплаты
     payment = {
-        type = 'cash', -- Тип оплаты (cash/bank)
-        minPayment = 150, -- Минимальная оплата за остановку
-        maxPayment = 250, -- Максимальная оплата за остановку
-        bonusChance = 25, -- Шанс получить бонус (%)
-        bonusMultiplier = 1.5 -- Множитель бонуса
+        type = 'cash',
+        minPayment = 150,
+        maxPayment = 250,
+        bonusChance = 25,
+        bonusMultiplier = 1.5
     },
 
-    -- Антифрод система
     anticheat = {
-        enabled = true, -- Включить антифрод
-        maxDistance = 50.0, -- Максимальное расстояние от остановки
-        minTimePerStop = 30, -- Минимальное время на остановку (секунды)
-        teleportCheck = true -- Проверка на телепорт
+        enabled = true,
+        maxDistance = 50.0,
+        minTimePerStop = 30,
+        teleportCheck = true
     },
 
-    -- Настройки логирования
     logging = {
-        enabled = true, -- Включить логирование
-        webhook = '', -- Discord webhook для логов
-        logPayments = true, -- Логировать выплаты
-        logRoutes = true -- Логировать завершенные маршруты
+        enabled = true,
+        webhook = '',
+        logPayments = true,
+        logRoutes = true
     },
 
-    -- Настройки отладки
     debug = {
-        enabled = false, -- Включить команды отладки
-        showSpawnCoords = true, -- Показывать координаты спавна в уведомлениях
-        logSpawnLocations = true -- Логировать выбранные места спавна
+        enabled = false,
+        showSpawnCoords = true,
+        logSpawnLocations = true
     },
     
-    -- Настройки оптимизации сети
     networking = {
-        busInfoUpdateDistance = 300.0, -- Максимальная дистанция для отправки обновлений об автобусе (в единицах)
-        busInfoCleanupDistance = 350.0 -- Дистанция для очистки информации об автобусе на клиенте
+        busInfoUpdateDistance = 300.0,
+        busInfoCleanupDistance = 350.0
     }
     
-    -- Доступные административные команды:
-    -- /busroutes - показать статистику маршрутов
-    -- /busvalidate - валидировать и исправить счетчики
-    -- /busplayers - показать активных водителей
-    -- /busfire [ID] - принудительно уволить водителя
-    -- /buslimit [число] - изменить лимит автобусов на маршруте (1-20)
-    -- /busspawns - показать координаты спавна (только при debug.enabled = true)
 }

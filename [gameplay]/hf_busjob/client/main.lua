@@ -1,47 +1,40 @@
 local config = require 'config.client'
 local sharedConfig = require 'config.shared'
 
--- Локальные переменные
 local jobNPC = nil
 local jobBlip = nil
 local currentBus = nil
 local currentStop = 1
-local currentRoute = nil -- Текущий выбранный маршрут
+local currentRoute = nil
 local currentStopBlip = nil
-local nextStopBlip = nil -- Блип следующей точки
-local currentCheckpoint = nil -- Текущий чекпоинт
+local nextStopBlip = nil
+local currentCheckpoint = nil
 local isWorking = false
 local totalEarnings = 0
-local npcCreated = false -- Флаг, чтобы NPC создавался один раз
-local lastCompletedStop = 0 -- Номер последней завершенной остановки
+local npcCreated = false
+local lastCompletedStop = 0
 
--- Система пассажиров
-local passengers = {}        -- Хранение активных пассажиров {ped, seatIndex, targetStop}
-local waitingPassengers = {} -- Пассажиры на остановке
+local passengers = {}
+local waitingPassengers = {}
 
--- Таймер выхода из автобуса
 local leaveStartTime = nil
 local leaveTimeout = config.leaveBusTimeout or 30000
 
--- Переменные для 3D маркеров остановок
-local isInsideStopZone = false -- Находится ли автобус в зоне остановки
-local markerThread = nil -- Поток отрисовки маркера
+local isInsideStopZone = false
+local markerThread = nil
 
--- Переменные для 3D текста на автобусах
-local busTextThread = nil -- Поток отрисовки текста на автобусах
-local activeBuses = {} -- Таблица активных автобусов других игроков {[vehicleEntity] = {routeId = 1, nextStopId = 1}}
+local busTextThread = nil
+local activeBuses = {}
 
--- Подключаем модуль AI-автобусов
 local aiBusModule = require 'client.ai_bus'
 
--- Вспомогательные функции для отрисовки 3D текста
 local function drawBusRouteName(coords, routeName)
     qbx.drawText3d({
         coords = coords + vector3(0.0, 0.0, 3.5),
         text = routeName,
         scale = 0.5,
         font = 4,
-        color = vec4(255, 255, 0, 255), -- Желтый цвет
+        color = vec4(255, 255, 0, 255),
         enableOutline = true,
         disableDrawRect = true
     })
@@ -53,19 +46,17 @@ local function drawBusStopInfo(coords, stopInfo)
         text = stopInfo,
         scale = 0.4,
         font = 4,
-        color = vec4(255, 255, 255, 255), -- Белый цвет
+        color = vec4(255, 255, 255, 255),
         enableOutline = true,
         disableDrawRect = true
     })
 end
 
--- Функция для получения следующей остановки с ID
 local function getNextStopInfo(route, currentStopId)
     if not route or not route.stops then return nil end
     
     currentStopId = currentStopId or currentStop
     
-    -- Ищем следующую остановку с названием
     for i = currentStopId, #route.stops do
         local stop = route.stops[i]
         if stop.waitTime and stop.waitTime > 0 then
@@ -76,7 +67,6 @@ local function getNextStopInfo(route, currentStopId)
         end
     end
     
-    -- Если не нашли впереди, ищем с начала (кольцевой маршрут)
     for i = 1, currentStopId - 1 do
         local stop = route.stops[i]
         if stop.waitTime and stop.waitTime > 0 then
@@ -90,13 +80,11 @@ local function getNextStopInfo(route, currentStopId)
     return nil
 end
 
--- Функция для получения названия следующей остановки (для совместимости)
 local function getNextStopName()
     local info = getNextStopInfo(currentRoute, currentStop)
     return info and info.name, info and info.id
 end
 
--- Функции для маркеров
 local startStopMarkerThread, stopStopMarkerThread
 
 -- Функция для запуска отрисовки 3D маркера остановки
@@ -1146,6 +1134,7 @@ RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
     activeBuses = {} -- Очищаем таблицу автобусов
     endWork()
 end)
+
 
 -- Функция периодической очистки далеких автобусов
 local function startBusCleanupThread()

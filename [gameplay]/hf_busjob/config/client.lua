@@ -1,90 +1,82 @@
 return {
-    -- Настройки отладки
-    debug = false, -- Включить режим отладки
+    debug = false,
 
-    -- Настройки маркеров
     marker = {
-        type = 1, -- Тип маркера
-        color = {r = 255, g = 255, b = 0, a = 200}, -- Цвет маркера (желтый)
-        scale = vec3(5.0, 5.0, 2.0), -- Размер маркера
-        bobUpAndDown = false, -- Анимация вверх-вниз
-        rotate = false -- Вращение маркера
+        type = 1,
+        color = {r = 255, g = 255, b = 0, a = 200},
+        scale = vec3(5.0, 5.0, 2.0),
+        bobUpAndDown = false,
+        rotate = false
     },
 
-    -- Настройки блипов
     blip = {
         route = {
-            sprite = 1, -- Иконка для маршрута
-            color = 5, -- Цвет (желтый)
+            sprite = 1,
+            color = 5,
             scale = 0.8,
-            route = true -- Показывать маршрут GPS
+            route = true
         },
         currentStop = {
-            sprite = 1, -- Иконка текущей остановки
-            color = 5, -- Цвет (зеленый)
+            sprite = 1,
+            color = 5,
             scale = 1.0,
-            flash = true -- Мигание блипа
+            flash = true
         }
     },
 
-    -- Клавиши
     keys = {
-        interact = 38, -- E - взаимодействие
-        cancelJob = 73 -- X - отмена работы
+        interact = 38,
+        cancelJob = 73
     },
 
-    -- Настройки уведомлений
     notifications = {
-        position = 'top', -- Позиция уведомлений
-        duration = 5000 -- Длительность показа (мс)
+        position = 'top',
+        duration = 5000
     },
 
-    -- Тайм-аут нахождения вне автобуса (мс)
-    leaveBusTimeout = 15000, -- 15 секунд (можно изменить на нужное значение)
+    leaveBusTimeout = 15000,
 
-    -- Настройки отображения AI автобусов
     aiBusDisplay = {
-        enabled = true, -- Включить отображение AI автобусов
-        blipSprite = 463, -- Спрайт блипа (автобус)
-        blipColor = 3, -- Цвет блипа (голубой)
-        blipScale = 0.6, -- Размер блипа
-        blipAlpha = 150, -- Прозрачность блипа
-        textColor = {0, 255, 255, 255}, -- Цвет 3D текста (голубой RGBA)
-        textScale = 0.4, -- Размер 3D текста
-        updateDistance = 500.0, -- Расстояние обновления данных
-        cleanupInterval = 30000, -- Интервал очистки устаревших данных (мс)
+        enabled = true,
+        blipSprite = 463,
+        blipColor = 3,
+        blipScale = 0.6,
+        blipAlpha = 150,
+        textColor = {0, 255, 255, 255},
+        textScale = 0.4,
+        updateDistance = 500.0,
+        cleanupInterval = 30000,
         
-        -- Расширенные настройки управления блипами и текстом
         blipSettings = {
-            showRouteInfo = true, -- Показывать информацию о маршруте в названии блипа
-            showNextStop = true, -- Показывать следующую остановку в названии блипа
-            blipPrefix = "AI ", -- Префикс для блипов AI автобусов
-            maxBlipNameLength = 50, -- Максимальная длина названия блипа
-            updateOnlyVisible = true, -- Обновлять только видимые блипы
-            removeOffscreenBlips = false -- Удалять блипы за пределами экрана
+            showRouteInfo = true,
+            showNextStop = true,
+            blipPrefix = "AI ",
+            maxBlipNameLength = 50,
+            updateOnlyVisible = true,
+            removeOffscreenBlips = false
         },
         
         textSettings = {
-            showRouteText = true, -- Показывать название маршрута над автобусом
-            showStopText = true, -- Показывать информацию об остановке
-            routeTextOffset = vector3(0.0, 0.0, 3.5), -- Смещение текста маршрута
-            stopTextOffset = vector3(0.0, 0.0, 3.0), -- Смещение текста остановки
-            routeTextColor = {255, 255, 0, 255}, -- Цвет текста маршрута (желтый RGBA)
-            stopTextColor = {0, 255, 255, 255}, -- Цвет текста остановки (голубой RGBA)
-            routeTextScale = 0.5, -- Размер текста маршрута
-            stopTextScale = 0.4, -- Размер текста остановки
-            enableOutline = true, -- Включить обводку текста
-            maxTextDistance = 100.0 -- Максимальное расстояние отображения текста
+            showRouteText = true,
+            showStopText = true,
+            routeTextOffset = vector3(0.0, 0.0, 3.5),
+            stopTextOffset = vector3(0.0, 0.0, 3.0),
+            routeTextColor = {255, 255, 0, 255},
+            stopTextColor = {0, 255, 255, 255},
+            routeTextScale = 0.5,
+            stopTextScale = 0.4,
+            enableOutline = true,
+            maxTextDistance = 100.0
         },
         
         performanceSettings = {
-            updateThrottleMs = 1000, -- Минимальный интервал между обновлениями (мс)
-            maxConcurrentUpdates = 5, -- Максимум одновременных обновлений
-            distanceBasedLOD = true, -- Уровень детализации в зависимости от расстояния
-            nearDistance = 50.0, -- Расстояние "близко" для полной детализации
-            farDistance = 200.0, -- Расстояние "далеко" для упрощенного отображения
-            enableCaching = true, -- Включить кэширование данных
-            cacheLifetime = 10000 -- Время жизни кэша (мс)
+            updateThrottleMs = 1000,
+            maxConcurrentUpdates = 5,
+            distanceBasedLOD = true,
+            nearDistance = 50.0,
+            farDistance = 200.0,
+            enableCaching = true,
+            cacheLifetime = 10000
         }
     }
 }

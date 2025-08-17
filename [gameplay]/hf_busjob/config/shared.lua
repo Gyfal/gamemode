@@ -1,18 +1,16 @@
 return {
-    -- Локация NPC для устройства на работу
     jobNPC = {
-        model = "s_m_m_cntrybar_01",                  -- Модель NPC
-        coords = vec4(1716.0, 3325.22, 41.22, 195.0), -- Координаты NPC (x, y, z, heading)
+        model = "s_m_m_cntrybar_01",
+        coords = vec4(1716.0, 3325.22, 41.22, 195.0),
         blip = {
             enabled = true,
-            sprite = 513, -- Иконка блипа (автобус)
+            sprite = 513,
             color = 38,
             scale = 0.8,
-            label = 'Автопарк' -- Название блипа
+            label = 'Автопарк'
         }
     },
 
-    -- Места спавна автобуса (выбирается случайно)
     busSpawnLocations = {
         vec4(1724.23, 3314.39, 42.05, 195.0),
         vec4(1728.45, 3312.98, 42.05, 195.0),
@@ -20,13 +18,12 @@ return {
         vec4(1736.66, 3310.34, 42.05, 195.0)
     },
 
-    -- Маршруты автобусов
     busRoutes = {
         {
             id = 1,
             name = 'Кольцевой маршрут штата',
             description = 'Кольцевой маршрут по всему штату с 23 остановками',
-            headingTolerance = 45.0, -- Допустимая погрешность heading в градусах
+            headingTolerance = 45.0,
             stops =
             {
                 { coords = vec3(1802.80, 3315.66, 42.97), heading = 210.79, payment = 0 },
@@ -207,7 +204,7 @@ return {
             id = 2,
             name = 'Кольцевой маршрут штата 2',
             description = 'Кольцевой маршрут по всему штату с 4 остановками',
-            headingTolerance = 45.0, -- Допустимая погрешность heading в градусах
+            headingTolerance = 45.0,
             stops =
             {
                 { coords = vec3(1802.80, 3315.66, 42.97), heading = 210.79, payment = 0 },
@@ -220,7 +217,6 @@ return {
         }
     },
 
-    -- Модели автобусов
     busModels = {
         {
             model = `bus`,
@@ -239,50 +235,29 @@ return {
         },
     },
 
-    -- Модели пассажиров NPC
     passengerModels = {
         male = {
             `a_m_m_afriamer_01`,
-            -- `a_m_m_beach_01`,
-            -- `a_m_m_bevhills_01`,
-            -- `a_m_m_business_01`,
-            -- `a_m_m_eastsa_01`,
-            -- `a_m_m_farmer_01`,
-            -- `a_m_m_genfat_01`,
-            -- `a_m_m_golfer_01`,
-            -- `a_m_m_hasjew_01`,
-            -- `a_m_m_hillbilly_01`
         },
         female = {
             `a_f_m_beach_01`,
-            -- `a_f_m_bevhills_01`,
-            -- `a_f_m_business_02`,
-            -- `a_f_m_downtown_01`,
-            -- `a_f_m_eastsa_01`,
-            -- `a_f_m_fatbla_01`,
-            -- `a_f_m_fatcult_01`,
-            -- `a_f_m_fatwhite_01`,
-            -- `a_f_m_ktown_01`,
-            -- `a_f_m_skidrow_01`
         }
     },
 
-    -- Настройки пассажиров
     passengerSettings = {
-        maxPassengersPerStop = 3,  -- Максимум пассажиров на остановке
-        minPassengersPerStop = 1,  -- Минимум пассажиров на остановке
-        passengerSpawnChance = 30, -- Шанс появления пассажиров на остановке (%)
+        maxPassengersPerStop = 3,
+        minPassengersPerStop = 1,
+        passengerSpawnChance = 30,
         passengerPayment = {
-            min = 50,              -- Минимальная оплата за пассажира
-            max = 100              -- Максимальная оплата за пассажира
+            min = 50,
+            max = 100
         },
-        waitTime = 3000,           -- Время ожидания посадки/высадки (мс)
-        exitChance = 30,           -- Шанс выхода пассажира на каждой остановке (%)
-        spawnDistance = 10.0,      -- Расстояние спавна пассажиров от остановки
-        animationTime = 2000       -- Время анимации посадки/высадки
+        waitTime = 3000,
+        exitChance = 30,
+        spawnDistance = 10.0,
+        animationTime = 2000
     },
 
-    -- Настройки
     settings = {
         stopRadius = 7.0,         -- Радиус остановки
         routeCompleteBonus = 500, -- Бонус за полный круг
@@ -293,7 +268,6 @@ return {
         maxBusesPerRoute = 2      -- Максимальное количество автобусов на одном маршруте
     },
 
-    -- Настройки AI-автобусов
     aiBusinessSettings = {
         enabled = true,                     -- Включить AI-автобусы
         enableDisplay = true,               -- Включить отображение AI автобусов (блипы и 3D текст)
@@ -314,7 +288,6 @@ return {
         minPassengers = 5,                  -- Минимум пассажиров в AI-автобусе
         maxPassengers = 15,                 -- Максимум пассажиров в AI-автобусе
 
-        -- Настройки отображения информации об остановках
         showStopInfo = true,                      -- Показывать информацию об остановках
         stopInfoDistance = 100.0,                 -- Расстояние отображения 3D текста (метры)
         blipUpdateInterval = 2000,                -- Интервал обновления блипов (мс)
@@ -322,7 +295,6 @@ return {
         stopInfoTextScale = 0.4,                  -- Размер текста информации об остановке
         stopInfoTextColor = { 0, 255, 255, 255 }, -- Цвет текста (голубой RGBA)
 
-        -- Дополнительные настройки для отображения AI автобусов
         displaySettings = {
             enableBlips = true,          -- Включить блипы AI автобусов на карте
             enable3DText = true,         -- Включить 3D текст над AI автобусами

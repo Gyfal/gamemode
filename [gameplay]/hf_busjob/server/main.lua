@@ -1,26 +1,13 @@
 local config = require 'config.server'
 local sharedConfig = require 'config.shared'
 
--- Хранение данных игроков
 local playerData = {}
-
--- Счетчик автобусов на маршрутах
 local routeBusCount = {}
+local busVisibility = {}
 
--- Система кэширования видимости автобусов
-local busVisibility = {} -- [busNetId] = { visibleTo = {[playerId] = lastSentData}, lastUpdate = timestamp }
-
--- ===========================
--- СИСТЕМА AI-АВТОБУСОВ
--- ===========================
-
-local aiBusinesses = {} -- [routeId] = {buses = {[busId] = busData}}
+local aiBusinesses = {}
 local aiBusIdCounter = 0
-
--- Текущий лимит автобусов на маршруте (можно изменить через админ команду)
 local maxBusesPerRoute = sharedConfig.settings.maxBusesPerRoute
-
--- Централизованные функции управления счетчиками маршрутов
 local function incrementRouteBusCount(routeId)
     if not routeId then return false end
     
@@ -63,14 +50,12 @@ end
 local function getRouteBusCount(routeId, includeAI)
     if not routeId then return 0 end
     
-    -- Считаем автобусы игроков
     local playerBuses = routeBusCount[routeId] or 0
     
     if not includeAI then
         return playerBuses
     end
     
-    -- Считаем AI-автобусы (по умолчанию учитываем)
     local aiBuses = 0
     if aiBusinesses[routeId] and aiBusinesses[routeId].buses then
         for _, _ in pairs(aiBusinesses[routeId].buses) do
@@ -94,7 +79,6 @@ local function validateRouteBusCount()
 end
 
 
--- Функция проверки расстояния (антифрод)
 local function isPlayerNearLocation(src, coords, maxDistance)
     if not config.anticheat.enabled then return true end
 
@@ -105,7 +89,6 @@ local function isPlayerNearLocation(src, coords, maxDistance)
     return distance <= (maxDistance or config.anticheat.maxDistance)
 end
 
--- Функция логирования
 function logToConsole(title, message)
     if not config.logging.enabled then return end
 
@@ -185,10 +168,11 @@ local function finishBusJob(src)
     })
 
     if config.logging.enabled then
+        local playerName = GetPlayerName(src) or ('ID: ' .. src)
         logToConsole(
             'Завершение работы',
             ('Игрок %s завершил работу. Заработано: $%d, Время: %d мин'):format(
-                GetPlayerName(src),
+                playerName,
                 data.earnings or 0,
                 math.floor(workTime / 60)
             )
@@ -947,6 +931,54 @@ AddEventHandler('playerDropped', function()
     end
 end)
 
+-- Обработка смерти игрока
+RegisterNetEvent('qbx_medical:server:onPlayerDied', function()
+    local src = source
+    if playerData[src] and playerData[src].working then
+        -- Показываем уведомление о смерти
+        lib.notify(src, {
+            title = 'Работа завершена',
+            description = 'Вы погибли и были уволены',
+            type = 'error',
+            duration = 5000
+        })
+        
+        if config.logging.enabled then
+            local playerName = GetPlayerName(src) or ('ID: ' .. src)
+            logToConsole(
+                'Смерть игрока',
+                ('Игрок %s погиб и был уволен с работы'):format(playerName)
+            )
+        end
+        
+        -- Завершаем работу с обработкой ошибок
+        local success, err = pcall(finishBusJob, src)
+        if not success and config.logging.enabled then
+            logToConsole('Ошибка завершения работы', ('Ошибка при завершении работы для игрока %s: %s'):format(src, err))
+        end
+    end
+end)
+
+-- Обработка предсмертного состояния (laststand)
+RegisterNetEvent('qbx_medical:server:onPlayerLaststand', function()
+    local src = source
+    if playerData[src] and playerData[src].working then
+        lib.notify(src, {
+            title = 'Критическое состояние',
+            description = 'Вы тяжело ранены! Если вас не спасут, работа будет завершена',
+            type = 'warning',
+            duration = 8000
+        })
+        
+        if config.logging.enabled then
+            local playerName = GetPlayerName(src) or ('ID: ' .. src)
+            logToConsole(
+                'Игрок в критическом состоянии',
+                ('Игрок %s в предсмертном состоянии во время работы'):format(playerName)
+            )
+        end
+    end
+end)
 
 -- Периодический поток управления видимостью автобусов
 CreateThread(function()

@@ -3,32 +3,42 @@ local Config = require('config')
 local Open = false
 local cam = nil
 local Peds = {}
-local Actions = {}
+local PedData = {} -- Хранит данные о педах (имя, позиция и т.д.)
+local currentPed = nil -- Текущий пед с которым взаимодействуем
+local nameTagThread = nil
+local interactionThread = nil
 
 -- Открытие диалога
 local function OpenDialog(options)
     if Open then return end
 
     Open = true
+    currentPed = options.ped
 
-    -- Создание камеры если включена
+    -- Скрыть HUD
+    DisplayRadar(false)
+
+    -- Создание камеры в стиле от первого лица
     if Config.Camera.enabled and options.ped then
+        local playerPed = PlayerPedId()
+        local playerCoords = GetEntityCoords(playerPed)
         local pedCoords = GetEntityCoords(options.ped)
         local pedHeading = GetEntityHeading(options.ped)
 
-        -- Рассчитываем позицию камеры
-        local camOffset = vector3(
-            Config.Camera.offsetX or 0.5,
-            Config.Camera.offsetY or 0.5,
-            Config.Camera.offsetZ or 0.0
+        -- Позиция камеры - чуть выше и впереди игрока, смотрит на NPC
+        local camPos = vector3(
+            playerCoords.x,
+            playerCoords.y,
+            playerCoords.z + 0.7
         )
-
-        local camPos = GetOffsetFromEntityInWorldCoords(options.ped, camOffset.x, camOffset.y, camOffset.z + 0.6)
 
         cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
         SetCamCoord(cam, camPos.x, camPos.y, camPos.z)
-        PointCamAtEntity(cam, options.ped, 0.0, 0.0, 0.5, true)
-        SetCamFov(cam, Config.Camera.fov or 30.0)
+
+        -- Направляем камеру на голову NPC
+        PointCamAtCoord(cam, pedCoords.x, pedCoords.y, pedCoords.z + 0.6)
+
+        SetCamFov(cam, Config.Camera.fov or 50.0)
         SetCamActive(cam, true)
         RenderScriptCams(true, true, 500, true, true)
     end
@@ -36,7 +46,8 @@ local function OpenDialog(options)
     -- Отправка данных в UI
     SendNUIMessage({
         action = 'open',
-        data = options.data
+        npcName = options.npcName or 'NPC',
+        dialogs = options.dialogs or {}
     })
 
     SetNuiFocus(true, true)
@@ -55,6 +66,10 @@ local function CloseDialog()
     if not Open then return end
 
     Open = false
+    currentPed = nil
+
+    -- Показать HUD
+    DisplayRadar(true)
 
     -- Удаление камеры
     if cam then
@@ -68,6 +83,23 @@ local function CloseDialog()
     })
 
     SetNuiFocus(false, false)
+end
+
+-- Отрисовка 3D текста
+local function Draw3DText(coords, text, scale)
+    local onScreen, x, y = World3dToScreen2d(coords.x, coords.y, coords.z)
+
+    if onScreen then
+        SetTextScale(scale, scale)
+        SetTextFont(4)
+        SetTextProportional(1)
+        SetTextColour(255, 255, 255, 255)
+        SetTextOutline()
+        SetTextEntry("STRING")
+        SetTextCentre(true)
+        AddTextComponentString(text)
+        DrawText(x, y)
+    end
 end
 
 -- Спавн педа по ID
@@ -93,39 +125,12 @@ local function SpawnPedByID(id)
     SetBlockingOfNonTemporaryEvents(ped, true)
 
     Peds[id] = ped
-
-    -- Добавление таргета
-    if Config.Target == 'ox' then
-        exports.ox_target:addLocalEntity(ped, {
-            {
-                name = 'dialog_' .. id,
-                icon = pedConfig.icon or 'fas fa-comment',
-                label = pedConfig.label or 'Поговорить',
-                onSelect = function()
-                    OpenDialog({
-                        ped = ped,
-                        data = pedConfig.data[1]
-                    })
-                end
-            }
-        })
-    elseif Config.Target == 'qb' then
-        exports['qb-target']:AddTargetEntity(ped, {
-            options = {
-                {
-                    icon = pedConfig.icon or 'fas fa-comment',
-                    label = pedConfig.label or 'Поговорить',
-                    action = function()
-                        OpenDialog({
-                            ped = ped,
-                            data = pedConfig.data[1]
-                        })
-                    end
-                }
-            },
-            distance = 2.5
-        })
-    end
+    PedData[ped] = {
+        id = id,
+        name = pedConfig.name or 'NPC',
+        coords = pedConfig.coords,
+        dialogs = pedConfig.dialogs or {}
+    }
 
     SetModelAsNoLongerNeeded(modelHash)
 end
@@ -134,22 +139,15 @@ end
 local function DeletePedByID(id)
     if not Peds[id] then return end
 
-    DeleteEntity(Peds[id])
+    local ped = Peds[id]
+    PedData[ped] = nil
+    DeleteEntity(ped)
     Peds[id] = nil
 end
 
--- NUI Callback для обработки кликов
-RegisterNUICallback('click', function(data, cb)
+-- NUI Callback для обработки действий
+RegisterNUICallback('action', function(data, cb)
     cb('ok')
-
-    if data.close then
-        CloseDialog()
-        return
-    end
-
-    if data.data then
-        SetDialog(data.data)
-    end
 
     if data.event then
         if data.type == 'server' then
@@ -158,7 +156,9 @@ RegisterNUICallback('click', function(data, cb)
             TriggerEvent(data.event)
         end
 
-        CloseDialog()
+        if data.closeAfter then
+            CloseDialog()
+        end
     end
 end)
 
@@ -168,6 +168,71 @@ RegisterNUICallback('close', function(data, cb)
     CloseDialog()
 end)
 
+-- Поток для отображения 3D имен и подсказок взаимодействия
+local function StartNameTagAndInteractionThread()
+    if nameTagThread then return end
+
+    nameTagThread = CreateThread(function()
+        local sleepTime = 0
+
+        while true do
+            Wait(sleepTime)
+            sleepTime = 500 -- По умолчанию спим долго
+
+            if not Open then
+                local playerPed = PlayerPedId()
+                local playerCoords = GetEntityCoords(playerPed)
+                local nearestPed = nil
+                local nearestDist = 999999
+
+                for ped, data in pairs(PedData) do
+                    if DoesEntityExist(ped) then
+                        local pedCoords = GetEntityCoords(ped)
+                        local dist = #(playerCoords - pedCoords)
+
+                        -- Отрисовка имени если близко
+                        if dist < 10.0 then
+                            sleepTime = 0
+                            local nameCoords = vector3(pedCoords.x, pedCoords.y, pedCoords.z + 1.1)
+                            Draw3DText(nameCoords, data.name, 0.35)
+
+                            -- Проверяем ближайшего педа для взаимодействия
+                            if dist < nearestDist and dist < Config.InteractionDistance then
+                                nearestPed = ped
+                                nearestDist = dist
+                            end
+                        end
+                    end
+                end
+
+                -- Показываем подсказку для ближайшего педа
+                if nearestPed then
+                    SendNUIMessage({
+                        action = 'showPrompt',
+                        text = 'Нажмите [E] чтобы поговорить'
+                    })
+
+                    -- Проверка нажатия E
+                    if IsControlJustPressed(0, 38) then -- E key
+                        local data = PedData[nearestPed]
+                        OpenDialog({
+                            ped = nearestPed,
+                            npcName = data.name,
+                            dialogs = data.dialogs
+                        })
+                    end
+                else
+                    SendNUIMessage({
+                        action = 'hidePrompt'
+                    })
+                end
+            else
+                sleepTime = 500
+            end
+        end
+    end)
+end
+
 -- Инициализация
 CreateThread(function()
     -- Ждем загрузки фреймворка если указано
@@ -176,12 +241,14 @@ CreateThread(function()
             for id, _ in pairs(Config.peds) do
                 SpawnPedByID(id)
             end
+            StartNameTagAndInteractionThread()
         end)
     else
         -- Спавним педов сразу
         for id, _ in pairs(Config.peds) do
             SpawnPedByID(id)
         end
+        StartNameTagAndInteractionThread()
     end
 end)
 

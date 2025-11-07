@@ -1,0 +1,11 @@
+# Node modules
+web/node_modules/
+web/package-lock.json
+
+# Build files (we commit dist for FiveM)
+# web/dist/
+
+# Development
+web/.vite/
+.DS_Store
+*.log

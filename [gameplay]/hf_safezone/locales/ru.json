@@ -1,0 +1,9 @@
+{
+    "safe_zone_enter": "Вы вошли в зеленую зону",
+    "safe_zone_exit": "Вы покинули зеленую зону",
+    "safe_zone_enter_desc": "PvP отключено, коллизии отключены",
+    "safe_zone_exit_desc": "PvP включено, коллизии включены",
+    "weapons_disabled": "Оружие отключено в зеленой зоне",
+    "pvp_disabled": "PvP отключено в зеленой зоне",
+    "safe_zone_active": "Активна защита зеленой зоны"
+}

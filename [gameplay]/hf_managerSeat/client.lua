@@ -218,9 +218,16 @@ CreateThread(function()
             local vehicleTryingToEnter = GetVehiclePedIsTryingToEnter(playerPed)
 
             -- Сбрасываем флаг входа, если игрок отменил попытку
-            if HFSeat.State.isEntering and vehicleTryingToEnter == 0 and not GetIsTaskActive(playerPed, 160) and not GetIsTaskActive(playerPed, 165) then
-                HFSeat.State.isEntering = false
-                print('[HFSeat] Entry cancelled by player')
+            if HFSeat.State.isEntering then
+                local isMoving = IsControlPressed(0, 32) or IsControlPressed(0, 33) or
+                                IsControlPressed(0, 34) or IsControlPressed(0, 35) -- W/S/A/D
+                local tasksFinished = not GetIsTaskActive(playerPed, 160) and not GetIsTaskActive(playerPed, 165)
+
+                -- Отменяем если: нет попытки входа И (задачи завершены ИЛИ игрок движется)
+                if vehicleTryingToEnter == 0 and (tasksFinished or isMoving) then
+                    HFSeat.State.isEntering = false
+                    print('[HFSeat] Entry cancelled by player')
+                end
             end
 
             -- Защита от флуда: выполняем вход только один раз

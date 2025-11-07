@@ -1,0 +1,9 @@
+{
+    "safe_zone_enter": "You entered a safe zone",
+    "safe_zone_exit": "You left the safe zone",
+    "safe_zone_enter_desc": "PvP disabled, collisions disabled",
+    "safe_zone_exit_desc": "PvP enabled, collisions enabled",
+    "weapons_disabled": "Weapons are disabled in safe zone",
+    "pvp_disabled": "PvP is disabled in safe zone",
+    "safe_zone_active": "Safe zone protection is active"
+}

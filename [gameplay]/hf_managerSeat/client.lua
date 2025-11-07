@@ -34,6 +34,7 @@ HFSeat.Config = {
 HFSeat.State = {
     isShuffling = false,
     isExiting = false,
+    isEntering = false,
     lastNearestVehicle = nil,
     lastNearestVehicleTime = 0
 }
@@ -210,24 +211,47 @@ CreateThread(function()
             --     end
             end
         else
-            
-        --     HFSeat.State.isShuffling = false
-        --     HFSeat.State.isExiting = false
+            -- Сброс состояний когда не в транспорте
+            HFSeat.State.isShuffling = false
+            HFSeat.State.isExiting = false
 
             local vehicleTryingToEnter = GetVehiclePedIsTryingToEnter(playerPed)
 
-            if vehicleTryingToEnter > 0 and not IsPedInAnyVehicle(playerPed, true) then
-                local seatTryingToEnter = GetSeatPedIsTryingToEnter(playerPed) or nil
-                local newSeat = HFSeat:GetAvailableSeat(vehicleTryingToEnter)
+            -- Сбрасываем флаг входа, если игрок отменил попытку
+            if HFSeat.State.isEntering and vehicleTryingToEnter == 0 and not GetIsTaskActive(playerPed, 160) and not GetIsTaskActive(playerPed, 165) then
+                HFSeat.State.isEntering = false
+                print('[HFSeat] Entry cancelled by player')
+            end
 
+            -- Защита от флуда: выполняем вход только один раз
+            if vehicleTryingToEnter > 0 and not IsPedInAnyVehicle(playerPed, true) and not HFSeat.State.isEntering then
+                HFSeat.State.isEntering = true
 
-                ClearPedTasksImmediately(playerPed)
-                print('[Complete] Entering new vehicle:', vehicleTryingToEnter, 'Seat:', newSeat)
-                TaskEnterVehicle(playerPed, vehicleTryingToEnter, -1, newSeat, 2.0, 1, 0)
+                -- Определяем целевое место (приоритет на водительское)
+                local targetSeat = HFSeat:GetAvailableSeat(vehicleTryingToEnter)
 
-                repeat Wait(0) until not IsControlPressed(0, 75)
-                while GetIsTaskActive(playerPed, 160) or GetIsTaskActive(playerPed, 165) do
-                    Wait(0)
+                if targetSeat ~= false then
+                    ClearPedTasksImmediately(playerPed)
+                    TaskEnterVehicle(playerPed, vehicleTryingToEnter, -1, targetSeat, 2.0, 1, 0)
+                    print('[HFSeat] Entering vehicle:', vehicleTryingToEnter, 'Target seat:', targetSeat)
+
+                    -- Отслеживаем завершение входа в отдельном потоке
+                    CreateThread(function()
+                        local timeout = GetGameTimer() + (HFSeat.Config.enterVehicleTimeout * 1000)
+
+                        -- Ждем пока игрок входит (task 160) или перемещается между местами (task 165)
+                        while (GetIsTaskActive(playerPed, 160) or GetIsTaskActive(playerPed, 165)) and GetGameTimer() < timeout do
+                            Wait(50)
+                        end
+
+                        -- Сбрасываем флаг после завершения или таймаута
+                        HFSeat.State.isEntering = false
+                        print('[HFSeat] Entry complete or timed out')
+                    end)
+                else
+                    -- Нет свободных мест
+                    HFSeat.State.isEntering = false
+                    print('[HFSeat] No available seats in vehicle')
                 end
             end
 
